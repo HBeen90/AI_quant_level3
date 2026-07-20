@@ -1,3 +1,4 @@
+
 # HBM 반도체 테마 지수 (HBM Semiconductor Theme Index)
 
 > 국내 상장 기업 중 HBM(High Bandwidth Memory) 밸류체인에 실질적으로 노출된 종목을 규칙 기반(rules-based)으로 선별하여 산출하는 커스텀 인덱스
@@ -152,3 +153,6 @@ B(t+1) = B(t) × ( M(t) ± ΔM(t+1) ) / M(t)
 
 - **종목 집중도 위험**: 앵커군 40% 고정 비중
 - **유동성 한계**: 소부장 종목의 낮은 유동성
+=======
+# AI_quant_level3
+

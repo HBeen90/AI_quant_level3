@@ -7,7 +7,11 @@
   + **비중은 weighting.allocate 위임**(잠정 자체 구현 삭제 - 귀속 원칙)
 - backtest/backtest.py : v2 이벤트 스케줄러(편출 공지 D+2 · 월간캡 D+2 ·
   예약 무효화) + 지수 재생 · 지표(수익률/변동성/MDD/회전율/상관/추종오차/비용)
-- tests/ : 명세 9 + 스케줄러 14(리뷰 3 + 안건3 4 + 안건1·2 4) + 통합 8 = **31/31**
+- tests/ : 명세 9 + 스케줄러 16(리뷰 3 + 안건3 4 + 안건1·2 4 + r5 회귀 2) +
+  통합 8 = **33/33**
+- 재현 기준: develop@0a2ca32 트리에 본 패키지 오버레이. 의존 모듈
+  (src/selection.py · src/weighting.py, 민수님 파트 원본)을 참조용으로
+  동봉했으므로 zip 단독으로도 33/33 재현 가능
   (CP949 콘솔 검증. 실행은 한 줄씩 - PowerShell 5.1은 && 미지원:
   `python tests/test_v2.py` / `python tests/test_schedule_v2.py` /
   `python tests/test_develop_integration.py`)
@@ -41,6 +45,27 @@
 - 합병: 소멸 종목 무대체 편출 + 동일자 원자 병합(기구현) + 거래조건가는
   워터폴 계약. 주식수 승계·제수는 index_calc 경계
 - rulebook_version v2.2+suspension-merger
+
+## r5 리뷰 반영 (r5.1)
+- [P1-3] 편출 집행 시 예약 긴급편입 전량 무효화(취소 마커) - 편출 종목
+  부활 차단, 재공표 필요. [P1-4] 회복 시 term_logged 리셋 - 반복 미달마다
+  이관 마커 재발생. 각 회귀 테스트 추가
+- [P1-5] 지원 범위 명시: 합병은 현금·단순 편출만 백테스트 지원. 주식교부
+  합병의 존속회사 승계는 index_calc 목표비중 이벤트 소비 경로로 반영
+- [P1-2] README.md·docs/methodology.md 에 v2 확정 조문 전체 반영(본 PR 포함)
+- [P2] 군 이동 테스트 68%로 유지 기준 실검증, 종료 테스트 or True 제거·
+  정확 시점 단언, 합병 pro-rata 수치 검증, 잔여 '산출 중단' 문구 정정
+
+## r5.1 최종 마감 (r5.2)
+- [P1] 편출가 최종 폴백 = 최소가격 0.0001원으로 확정 기입(v8 승계) -
+  README·methodology 반영. 팀이 0원 채택 시 숫자 1곳만 교체
+- [P2] 소스 헤더 현행화: assign_weights_v2 = weighting.allocate 위임 어댑터,
+  MethodologyReviewRequired = 전 종목 편출 등 진짜 산출 불가에만 사용
+
+## index_calc(인서님) 인계 과제
+- 주식교부 합병: 존속회사 주식수 증가를 반영한 '최종 목표비중 이벤트' 생성
+  기능이 index_calc에 아직 없음. 생성되면 backtest.simulate_index 가 그대로
+  소비하는 인터페이스(이벤트 규격 동일)로 백테스트 반영 완성
 
 ## 미결(변동 없음)
 - 유지 임계값 27/67은 실측 데이터 전 잠정 - hbm_evidence 카드 산정 후 재검토

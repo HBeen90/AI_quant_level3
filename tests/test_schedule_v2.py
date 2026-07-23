@@ -196,9 +196,11 @@ with _w.catch_warnings():
 term = hist10[hist10["event"] == "termination_review_due"]
 assert len(term) == 1
 pos10 = {d: k for k, d in enumerate(prices.index[prices.index >= dates[0]])}
-assert pos10[term["date"].iloc[0]] - 32 >= 10           # breach(=dates[32]) + 10일
-assert ev10[-1]["effective_date"] >= term["date"].iloc[0] or True
-print("[OK] window 초과 -> 7.3 이관 마커(산출 지속)")
+assert pos10[term["date"].iloc[0]] - 32 == 10           # breach(dates[32]) + 정확히 window
+# 산출 지속의 증명: 마커 이후에도 예외 없이 전체 기간을 완주했고(위에서
+# build_event_schedule 이 정상 반환), 마커는 단 1회만 기록된다(중복 없음).
+assert term["date"].iloc[0] < prices.index[-1]
+print("[OK] window 초과 -> 7.3 이관 마커 1회(정확한 시점)·산출 지속")
 
 print("\n10/10 스케줄러 스모크 통과 (안건 3 회귀 포함)")
 
@@ -260,12 +262,48 @@ with _w.catch_warnings():
     evM, _ = build_event_schedule(prices, {dates[0]: snap(BASE)},
                                   {dates[30]: [("200001", "합병(흡수소멸)")]})
 exM = [e for e in evM if e["reason"] == "exclusion"][0]
-w_before = [e for e in evM if e["reason"] == "regular"][0]["target_weights"]
+w0 = [e for e in evM if e["reason"] == "regular"][0]["target_weights"]
 w_after = exM["target_weights"]
 assert "200001" not in w_after.index
-common = w_after.index
 assert (w_after > 0).all() and abs(w_after.sum() - 1) < 1e-12
-# 편출 직전 대비 모든 잔여 종목 비중이 (드리프트 차이를 감안해도) 재배분으로 상승
-print("[OK] 합병 편출: 무대체·정규화(제수 동치) - 주식수 승계는 index_calc 영역")
+# pro-rata 실검증: 편출은 드리프트된 비중의 비례 정규화이므로 잔여 종목 간
+# 비율은 w0 x 가격상대(P_excl/P_0) 의 비율과 일치해야 한다. 존속회사로의
+# 비중 이전(주식교부 승계) 같은 왜곡이 없음을 수치로 확인한다.
+rel = prices.loc[exM["effective_date"]] / prices.loc[dates[0]]
+for a, b in [("000001", "100001"), ("100002", "200002")]:
+    expect = (w0[a] * rel[a]) / (w0[b] * rel[b])
+    got = w_after[a] / w_after[b]
+    assert abs(got / expect - 1) < 1e-9, f"pro-rata 위반 {a}/{b}"
+print("[OK] 합병 편출: pro-rata 수치 검증(승계 왜곡 없음) - 주식교부는 index_calc 소비 경로")
 
-print("\n14/14 스케줄러 스모크 통과 (안건 1·2·3 회귀 포함)")
+# 15) [리뷰 P1-3] 예약 긴급편입은 이후 편출로 무효화 - 편출 종목 부활 금지
+with _w.catch_warnings():
+    _w.simplefilter("ignore")
+    ev15, hist15 = build_event_schedule(
+        pxE, {dates[0]: snap(BASE)},
+        {ann8: [("200001", "합병"), ("200002", "관리종목"),
+                ("100003", "상장폐지")],
+         dates[39]: [("100002", "상장폐지")]},   # 집행 dates[41]: 공표(40)와 A+2(42) 사이
+        {A: em_snap})
+assert not [e for e in ev15 if e["reason"] == "emergency_fill"], \
+    "무효화 실패 - 예약 긴급편입이 집행됨"
+assert (hist15["event"] == "emergency_booking_cancelled").any()
+ex_last = [e for e in ev15 if e["reason"] == "exclusion"][-1]
+assert "100002" not in ex_last["target_weights"].index, "편출 종목 부활"
+print("[OK] 예약 긴급편입 무효화: 후속 편출 종목 부활 금지·취소 마커")
+
+# 16) [리뷰 P1-4] 회복 후 두 번째 미달에도 이관 마커 재발생
+with _w.catch_warnings():
+    _w.simplefilter("ignore")
+    ev16, hist16 = build_event_schedule(
+        pxE, {dates[0]: snap(BASE)},
+        {ann8: [("200001", "합병"), ("200002", "관리종목"),
+                ("100003", "상장폐지")],            # 1차 미달(32~)
+         dates[60]: [("300001", "상장폐지")]},      # 회복(42) 후 2차 미달(62~)
+        {A: em_snap}, cfg=_C(emergency_window_days=5))   # 1차 마커(37)<회복(42)
+terms16 = hist16[hist16["event"] == "termination_review_due"]
+assert len(terms16) == 2, f"이관 마커 {len(terms16)}회 - 반복 미달 미기록"
+assert (hist16["event"] == "under_min_resolved").any()
+print("[OK] 회복 후 재미달: termination_review_due 재발생(term_logged 리셋)")
+
+print("\n16/16 스케줄러 스모크 통과 (안건 1·2·3 + r5 리뷰 회귀 포함)")

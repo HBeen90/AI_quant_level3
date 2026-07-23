@@ -91,8 +91,12 @@ def build_event_schedule(prices: pd.DataFrame,
     review_snapshots : {정기변경 시행일: 심사 스냅샷 DataFrame}
     adhoc_exclusions : {공지일: [(ticker, 사유), ...]} -> 공지일 기준 D+2에 편출 집행
     원칙:
-      - 편출 후 대체 편입 없음. 편출 결과 5종목 미만이면
-        MethodologyReviewRequired 전파(산출 중단).
+      - 편출 후 대체 편입 없음. 편출 결과 5종목 미만이어도 산출을 지속하고
+        긴급 재심사 절차로 회복한다(안건 3 확정 - 전 종목 편출만 산출 불가).
+      - [지원 범위] 합병은 현금합병·단순 편출만 백테스트로 지원한다.
+        주식교부 합병의 존속회사 비중 승계(주식수 증가)는 index_calc(제수)
+        영역이며, 그 산출물(최종 목표비중 이벤트)을 본 simulate_index가
+        소비하는 방식으로 반영한다 - 자체 승계 계산은 하지 않는다.
       - 월말 점검에서 30% 초과 시 25% 캡을 D+2에 집행(README 3장 ①).
       - 구성 변경(정기·편출) 발생 시 기존 캡 예약은 전부 취소하고 새 구성
         기준으로 재점검·재예약한다(예약이 낡은 구성을 되살리지 않도록).
@@ -129,7 +133,7 @@ def build_event_schedule(prices: pd.DataFrame,
     term_logged = False
 
     def track_breach(i: int, d) -> None:
-        nonlocal breach_idx
+        nonlocal breach_idx, term_logged
         if vm is None:
             return
         under = len(vm.weights) < cfg.min_constituents
@@ -139,6 +143,7 @@ def build_event_schedule(prices: pd.DataFrame,
                          "n": len(vm.weights)})
         elif not under and breach_idx is not None:
             breach_idx = None
+            term_logged = False        # [리뷰 P1-4] 두 번째 미달도 마커가 나오도록
             hist.append({"date": d, "event": "under_min_resolved",
                          "n": len(vm.weights)})
 
@@ -194,7 +199,11 @@ def build_event_schedule(prices: pd.DataFrame,
                 excluded_cum |= {t for t, _ in batch}
                 vm.apply_exclusions(batch)   # 안건 3: 5 미만이어도 산출 지속
                 events.append(make_event(d, "exclusion", vm.weights))
-                recheck_and_book_cap(i)                 # 예약 무효화 + 재점검
+                if pending_emrg:             # [리뷰 P1-3] 구성 변경 -> 예약 긴급
+                    pending_emrg.clear()     # 편입 무효화(재공표 필요) - 예약이
+                    hist.append({"date": d,  # 방금 편출된 종목을 되살리지 않도록
+                                 "event": "emergency_booking_cancelled"})
+                recheck_and_book_cap(i)                 # 캡 예약 무효화 + 재점검
                 track_breach(i, d)
                 continue
 

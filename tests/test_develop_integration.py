@@ -142,16 +142,17 @@ def test_group_migration_core_to_sat():
     인정해 '이동한 군(위성)'의 유지 임계값(67%)을 적용할 뿐이다.
     결과: 편출이 아니라 위성으로 이동하며 잔류."""
     cfg = ConfigV2.with_policy("mid")
-    rows = BASE + [("이동후보", "100020", "장비", 8e12, False, 0.25, 0.80, True, True)]
+    # 메모리향 68%: 위성 '유지'(>=67%)는 충족하지만 '신규'(>=70%)는 미달 -
+    # 유지 임계값이 실제로 판정을 가른다(리뷰 P2: 80%면 신규도 편입돼 미검증).
+    rows = BASE + [("이동후보", "100020", "장비", 8e12, False, 0.25, 0.68, True, True)]
     prev = {"100020"}                        # 직전까지 핵심으로 편입돼 있던 종목
     out = select_from_selection(kr_snap(rows), prev, cfg)
     row = out[out["코드"] == "100020"]
     assert len(row) == 1, "군 이동 대상이 편출됨"
     assert row["군"].iloc[0] == "위성", f"핵심->위성 이동 실패: {row['군'].iloc[0]}"
-    # 대조: 신규였다면 핵심 30%도 위성 70%도 판정은 되지만 - 신규 임계값 기준
     out_new = select_from_selection(kr_snap(rows), set(), cfg)
-    assert out_new[out_new["코드"] == "100020"]["군"].iloc[0] == "위성"
-    ok("군 이동 핵심->위성: 이동한 군의 유지 기준 적용·잔류")
+    assert "100020" not in set(out_new["코드"]), "신규 68%가 편입됨 - 유지 기준 미검증"
+    ok("군 이동 핵심->위성(68%): 기존만 유지·신규 미편입 - 유지 기준 실검증")
 
 
 def test_group_migration_sat_to_core():

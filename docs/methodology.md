@@ -206,3 +206,27 @@ B(t+1) = B(t) × ( M(t) ± ΔM(t+1) ) / M(t)
 
 - **종목 집중도 위험**: 앵커군 40% 고정 비중
 - **유동성 한계**: 소부장 종목의 낮은 유동성
+
+---
+
+## 6. 재현 검증과 데이터 계약
+
+2026-07-23 확정 7종목의 비중 산정은 공표 반올림 범위 안에서 재현했다
+(최대 오차 `0.0013%p`). 인서님 `index_calc`와의 독립 경로 대조에서는
+정기변경과 무대체 수시편출이 모두 일치했다(3/3, 최대 상대차 `1e-14`
+미만).
+
+```powershell
+python analysis/verify_constituents.py --csv data/constituents/구성종목_인계_20260723.csv
+python -m unittest tests/test_verify_constituents.py -v
+python tests/test_index_calc_equivalence.py
+```
+
+- [실데이터 교차검증 최종 검토본](real_data_cross_validation_final.md)
+- [비앵커 테마 적합도 모니터링 지표 검토본](theme_relevance_decision_review.md)
+- [데이터 인계 계약](data_handoff_contract.md)
+- [index_calc 공동 접합 검증](index_calc_integration_validation.md)
+
+현재 완료 범위는 확정 7종목의 횡단면 비중 산정, 정기변경 및 무대체
+수시편출의 산출 경로 대조다. 후보 33종목 선정 판정 전체 재생, 시계열
+회전율, 월간 cap·긴급편입·주식교부 합병의 공동 대조는 포함하지 않는다.

@@ -1,6 +1,7 @@
-__pycache__/
-*.pyc
-.ipynb_checkpoints/
+# DART API 키 — public 레포이므로 절대 커밋 금지
 .env
-data/raw/*.xlsx
-data/raw/*.csv
+
+# 사업보고서 원문 발췌 자동 생성물 — 커밋하지 않는다
+evidence/
+
+__pycache__/

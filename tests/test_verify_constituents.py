@@ -98,12 +98,12 @@ class ThemeRelevanceTests(unittest.TestCase):
              "weight": 0.0061, "exposure": np.nan, "mem_ratio": 0.75},
         ])
 
-    def test_published_composition_score_and_floor(self):
+    def test_published_composition_score_and_hold_scenario(self):
         data = self._constituents()
         self.assertAlmostEqual(theme_relevance.relevance_score(data), 0.4405166667)
         self.assertAlmostEqual(theme_relevance.current_weight_floor(data), 0.2740666667)
 
-    def test_single_name_stress_identifies_hanmi_trigger(self):
+    def test_single_name_stress_crosses_35pct_reference(self):
         stress = theme_relevance.single_name_stress(self._constituents())
         scores = stress.set_index("종목명")["스트레스 점수"]
         self.assertAlmostEqual(scores["한미반도체"], 0.3415166667)

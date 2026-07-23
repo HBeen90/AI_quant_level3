@@ -214,13 +214,25 @@ def audit_opinion(text: str) -> tuple[str, list[str]]:
     DART report() API 로는 제공되지 않아 본문에서 찾는다.
     반환: (판정, 근거문장들).  판정이 '확인필요'면 사람이 원문을 봐야 한다.
     """
+    # 1순위: 「회계감사인의 감사의견」 섹션 안에서만 판정한다.
+    #   본문 다른 곳(예: 대손처리 정책의 "감사의견이 부적정이거나 의견거절인 경우…")에
+    #   나오는 일반 기준 서술을 실제 의견으로 오인하는 오탐 방지 (V15에서 ISC 오탐 확인).
+    sec = re.search(r"회계\s*감사인의\s*감사의견", text)
+    if sec:
+        window = text[sec.start(): sec.start() + 4000]
+        wlines = [re.sub(r"\s+", " ", window[:1200]).strip()]
+        for bad in ("의견거절", "부적정", "한정의견", "한정 의견"):
+            if bad in window:
+                return bad, wlines
+        if "적정" in window:
+            return "적정", wlines
+    # 2순위(섹션 못 찾음): 기존 방식 — 키워드 주변 문장 수집 후 보수적 판정
     lines = []
     for m in re.finditer(r"감사의견", text):
         seg = re.sub(r"\s+", " ", text[max(0, m.start() - 150): m.start() + 300]).strip()
         if seg not in lines:
             lines.append(seg)
     joined = " ".join(lines)
-    # 부정 의견이 하나라도 있으면 그쪽이 우선(보수적)
     for bad in ("의견거절", "부적정", "한정의견", "한정 의견"):
         if bad in joined:
             return bad, lines[:4]

@@ -6,4 +6,8 @@ __pycache__/
 data/raw/*.xlsx
 data/raw/*.csv
 
+
+# 사업보고서 원문 발췌 자동 생성물(hbm_evidence.py) — 커밋하지 않는다
+evidence/
+
 notebooks/00_concept_check.ipynb

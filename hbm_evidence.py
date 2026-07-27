@@ -9,7 +9,7 @@ HBM 판정 근거 자동 수집 - 손으로 채워야 하는 3개 값의 '읽을
 이 값들은 기업이 별도 공시하지 않아 사람이 판단해야 한다. 다만 **판단에 필요한 근거를
 찾아 여는 작업**은 자동화할 수 있다. 이 도구가 하는 일:
 
-  1. 최신 사업보고서를 찾아 본문을 내려받는다
+  1. 지정 사업연도의 사업보고서(미지정 시 최신)를 찾아 본문을 내려받는다
   2. 「매출 및 수주상황」의 제품별 매출 표를 뽑는다
   3. HBM 관련 키워드(HBM · TSV · 하이브리드본딩 · TC본더 …)가 나온 문장을 전부 모은다
   4. 최근 공급계약(수주) 공시 제목을 모은다  ← HBM 양산·납품 정황 증거
@@ -86,6 +86,37 @@ def latest_report(dart, code: str, years_back: int = 2):
             r = hit.sort_values("rcept_dt", ascending=False).iloc[0]
             return str(r["report_nm"]).strip(), str(r["rcept_no"]), str(r["rcept_dt"])
     return None
+
+
+def annual_report(dart, code: str, fiscal_year: int):
+    """Return the annual report filed for one fiscal year.
+
+    A fiscal-year report is normally filed in the following calendar year.
+    Restricting the query window prevents a current report from leaking into a
+    historical judgment card.
+
+    Note: the window assumes a **December fiscal-year end** (the report lands in
+    the next calendar year). This holds for essentially all Korean listed
+    semiconductor names in scope; a non-December-FYE issuer would file within
+    its own calendar year and fall outside this window. Widening the window is
+    not safe without each firm's FYE (it would re-admit look-ahead), so this is
+    left as a documented assumption rather than a silent guess.
+    """
+    start = f"{fiscal_year + 1}-01-01"
+    end = f"{fiscal_year + 1}-12-31"
+    try:
+        lst = dart.list(code, start=start, end=end, kind="A")
+    except Exception:
+        return None
+    if lst is None or len(lst) == 0:
+        return None
+    hit = lst[lst["report_nm"].astype(str).str.contains("사업보고서", na=False)]
+    if len(hit) == 0:
+        return None
+    original = hit[~hit["report_nm"].astype(str).str.contains("정정", na=False)]
+    chosen = original if len(original) else hit
+    r = chosen.sort_values("rcept_dt", ascending=True).iloc[0]
+    return str(r["report_nm"]).strip(), str(r["rcept_no"]), str(r["rcept_dt"])
 
 
 def sales_section(text: str, span: int = 6000) -> str:
@@ -182,18 +213,27 @@ def ir_links(dart, code: str, limit: int = 6) -> tuple[str, list[str]]:
     return home, out
 
 
-def admin_status_map() -> dict[str, str]:
+#: build_card 가 관리종목 판정을 '아직 모름'으로 남기는 표기값. 빈칸으로 나가
+#: 사람이 확인한다 - False(=관리종목 아님)로 조용히 코어스하지 않는다.
+ADMIN_UNKNOWN = ("PIT 수동확인", "조회실패-수동확인")
+
+
+def admin_status_map() -> dict[str, str] | None:
     """전 종목의 소속부(관리종목·투자주의환기 등)를 한 번에 조회.
 
     FinanceDataReader 의 KRX 상장목록 `Dept` 컬럼에 거래소 지정 상태가 들어 있다.
     (예: '관리종목(소속부없음)', '투자주의환기종목(소속부없음)')
     pykrx·DART 에는 없는 정보라 여기서 받는다. 전체를 한 번만 받아 사전으로 만든다.
+
+    반환: 성공 시 {코드: 상태} 사전(해당 종목이 없으면 빈 사전). **조회 실패 시
+    None** - 빈 사전(성공했으나 지정 종목 0)과 구분해야 한다. 실패를 빈 사전으로
+    돌려주면 호출부가 전 종목을 '관리종목 아님'으로 오판한다(조용한 오분류).
     """
     try:
         import FinanceDataReader as fdr
         df = fdr.StockListing("KRX")
     except Exception:
-        return {}
+        return None
     out = {}
     for _, r in df.iterrows():
         dept = str(r.get("Dept") or "")
@@ -207,6 +247,33 @@ def admin_status_map() -> dict[str, str]:
     return out
 
 
+def admin_flag_for(code: str, admin: dict | None, fiscal_year: int | None) -> str:
+    """카드에 넣을 관리종목 표기값을 정한다.
+
+    · PIT(과거연도) 모드: 현재 상태 자동 혼입 금지 → 'PIT 수동확인'
+    · 조회 실패(admin is None): 'False' 로 코어스하지 않고 '조회실패-수동확인'
+    · 조회 성공: 지정 종목이면 그 상태, 아니면 '해당없음'
+    """
+    if fiscal_year is not None:
+        return "PIT 수동확인"
+    if admin is None:
+        return "조회실패-수동확인"
+    return admin.get(code, "해당없음")
+
+
+def admin_issue_cell(v):
+    """판정 템플릿의 관리종목 셀 값. UNKNOWN 은 빈칸(사람이 채움), 아니면 bool.
+    '조회 실패'와 '조회했으나 해당없음(False)'을 뭉개지 않는 것이 핵심.
+
+    카드 생성이 조기 실패한 행(보고서·본문 조회 실패)은 '관리종목' 키가 없어
+    summary 에서 NaN 이 된다. NaN 을 그대로 두면 `NaN != '해당없음'`이 True 가
+    되어 미조회 종목이 '관리종목'으로 오기록되므로, NaN·빈칸도 UNKNOWN(빈칸)으로
+    본다(수집 실패를 False 로도 True 로도 코어스하지 않는다)."""
+    if pd.isna(v) or v in ADMIN_UNKNOWN or (isinstance(v, str) and v.strip() == ""):
+        return ""
+    return v != "해당없음"
+
+
 def audit_opinion(text: str) -> tuple[str, list[str]]:
     """사업보고서 본문에서 회계감사인의 감사의견을 추출.
 
@@ -214,25 +281,13 @@ def audit_opinion(text: str) -> tuple[str, list[str]]:
     DART report() API 로는 제공되지 않아 본문에서 찾는다.
     반환: (판정, 근거문장들).  판정이 '확인필요'면 사람이 원문을 봐야 한다.
     """
-    # 1순위: 「회계감사인의 감사의견」 섹션 안에서만 판정한다.
-    #   본문 다른 곳(예: 대손처리 정책의 "감사의견이 부적정이거나 의견거절인 경우…")에
-    #   나오는 일반 기준 서술을 실제 의견으로 오인하는 오탐 방지 (V15에서 ISC 오탐 확인).
-    sec = re.search(r"회계\s*감사인의\s*감사의견", text)
-    if sec:
-        window = text[sec.start(): sec.start() + 4000]
-        wlines = [re.sub(r"\s+", " ", window[:1200]).strip()]
-        for bad in ("의견거절", "부적정", "한정의견", "한정 의견"):
-            if bad in window:
-                return bad, wlines
-        if "적정" in window:
-            return "적정", wlines
-    # 2순위(섹션 못 찾음): 기존 방식 - 키워드 주변 문장 수집 후 보수적 판정
     lines = []
     for m in re.finditer(r"감사의견", text):
         seg = re.sub(r"\s+", " ", text[max(0, m.start() - 150): m.start() + 300]).strip()
         if seg not in lines:
             lines.append(seg)
     joined = " ".join(lines)
+    # 부정 의견이 하나라도 있으면 그쪽이 우선(보수적)
     for bad in ("의견거절", "부적정", "한정의견", "한정 의견"):
         if bad in joined:
             return bad, lines[:4]
@@ -241,11 +296,13 @@ def audit_opinion(text: str) -> tuple[str, list[str]]:
     return "확인필요", lines[:4]
 
 
-def dilution_events(dart, code: str, years_back: int = 2) -> list[str]:
+def dilution_events(dart, code: str, years_back: int = 2,
+                    end_date: str | None = None) -> list[str]:
     """유상증자·전환사채 등 희석 이벤트 공시 - 편입 직후 주가 희석 리스크 점검용."""
-    start = (dt.date.today() - dt.timedelta(days=365 * years_back)).strftime("%Y-%m-%d")
+    end = (pd.Timestamp(end_date).date() if end_date else dt.date.today())
+    start = (end - dt.timedelta(days=365 * years_back)).strftime("%Y-%m-%d")
     try:
-        lst = dart.list(code, start=start)
+        lst = dart.list(code, start=start, end=end.strftime("%Y-%m-%d"))
     except Exception:
         return []
     if lst is None or len(lst) == 0:
@@ -256,11 +313,13 @@ def dilution_events(dart, code: str, years_back: int = 2) -> list[str]:
     return [f"{r['rcept_dt']}  {str(r['report_nm']).strip()}" for _, r in hit.iterrows()]
 
 
-def supply_contracts(dart, code: str, years_back: int = 2) -> list[str]:
+def supply_contracts(dart, code: str, years_back: int = 2,
+                     end_date: str | None = None) -> list[str]:
     """단일판매·공급계약 공시 제목 - 누구에게 무엇을 납품하는지의 정황 증거."""
-    start = (dt.date.today() - dt.timedelta(days=365 * years_back)).strftime("%Y-%m-%d")
+    end = (pd.Timestamp(end_date).date() if end_date else dt.date.today())
+    start = (end - dt.timedelta(days=365 * years_back)).strftime("%Y-%m-%d")
     try:
-        lst = dart.list(code, start=start)
+        lst = dart.list(code, start=start, end=end.strftime("%Y-%m-%d"))
     except Exception:
         return []
     if lst is None or len(lst) == 0:
@@ -271,10 +330,12 @@ def supply_contracts(dart, code: str, years_back: int = 2) -> list[str]:
 
 
 def build_card(dart, code: str, name: str | None = None,
-               admin: dict[str, str] | None = None) -> dict:
+               admin: dict[str, str] | None = None,
+               fiscal_year: int | None = None) -> dict:
     """종목 1개의 판정 카드(마크다운) 생성. 반환: 요약 dict"""
-    admin_flag = (admin or {}).get(code, "해당없음")
-    info = latest_report(dart, code)
+    admin_flag = admin_flag_for(code, admin, fiscal_year)
+    info = (annual_report(dart, code, fiscal_year)
+            if fiscal_year is not None else latest_report(dart, code))
     if info is None:
         return {"코드": code, "종목명": name or "", "상태": "정기보고서 없음"}
     title, rcept, rdate = info
@@ -289,10 +350,14 @@ def build_card(dart, code: str, name: str | None = None,
     proc_lines = keyword_lines(text, PROC_KW, limit=15)
     mem_lines = keyword_lines(text, MEM_KW, limit=15)
     non_lines = keyword_lines(text, NONMEM_KW, limit=10)
-    contracts = supply_contracts(dart, code)
+    report_asof = pd.to_datetime(rdate, format="%Y%m%d").strftime("%Y-%m-%d")
+    contracts = supply_contracts(dart, code, end_date=report_asof)
     opinion, op_lines = audit_opinion(text)
-    dilution = dilution_events(dart, code)
-    home, irs = ir_links(dart, code)
+    dilution = dilution_events(dart, code, end_date=report_asof)
+    if fiscal_year is None:
+        home, irs = ir_links(dart, code)
+    else:
+        home, irs = "", ["(과거 PIT 모드: 현재 IR 링크 자동수집 생략)"]
 
     n_hbm = sum(text.count(k) for k in HBM_KW)
     n_proc = sum(text.count(k) for k in PROC_KW)
@@ -363,6 +428,7 @@ def build_card(dart, code: str, name: str | None = None,
     (OUTDIR / f"{code}_{safe}.md").write_text("\n".join(md), encoding="utf-8")
 
     return {"코드": code, "종목명": name or "", "보고서": title, "접수일": rdate,
+            "접수번호": rcept, "사업연도": fiscal_year,
             "HBM언급": n_hbm, "고유공정언급": n_proc,
             "공급계약수": len(contracts), "감사의견": opinion,
             "관리종목": admin_flag, "희석공시": len(dilution), "상태": "ok"}
@@ -372,6 +438,8 @@ def main():
     ap = argparse.ArgumentParser(description="HBM 판정 근거 자동 수집")
     ap.add_argument("--input", help="코드 리스트 CSV (컬럼: 코드[, 종목명])")
     ap.add_argument("--codes", help="쉼표로 구분한 종목코드 (예: 042700,005930)")
+    ap.add_argument("--fiscal-year", type=int,
+                    help="PIT 카드 사업연도. 지정 시 해당 연도 사업보고서만 사용")
     args = ap.parse_args()
 
     if args.codes:
@@ -394,9 +462,15 @@ def main():
     except Exception:
         stock = None
 
-    print("거래소 지정(관리종목·투자주의환기) 목록 조회 중… ", end="", flush=True)
-    admin = admin_status_map()
-    print(f"{len(admin)}종목 확인" if admin else "조회 실패(관리종목은 수동 확인 필요)")
+    if args.fiscal_year is None:
+        print("거래소 지정(관리종목·투자주의환기) 목록 조회 중... ",
+              end="", flush=True)
+        admin = admin_status_map()
+        print("조회 실패(관리종목은 UNKNOWN 으로 표기 - 수동 확인 필요)"
+              if admin is None else f"{len(admin)}종목 확인")
+    else:
+        admin = {}
+        print(f"FY{args.fiscal_year} PIT 모드: 현재 관리종목·IR 정보 자동 혼입 차단")
 
     rows = []
     for _, r in df.iterrows():
@@ -407,8 +481,8 @@ def main():
                 name = stock.get_market_ticker_name(code)
             except Exception:
                 name = None
-        print(f"  {code} {name or ''} … ", end="", flush=True)
-        res = build_card(dart, code, name, admin)
+        print(f"  {code} {name or ''} ... ", end="", flush=True)
+        res = build_card(dart, code, name, admin, args.fiscal_year)
         rows.append(res)
         if res["상태"] != "ok":
             print(res["상태"])
@@ -422,18 +496,30 @@ def main():
 
     # 판정 입력 템플릿 - 카드를 읽고 이 CSV만 채우면 build_index.py 에 바로 들어간다
     tpl = summary[["종목명", "코드"]].copy()
+    tpl["사업연도"] = args.fiscal_year if args.fiscal_year is not None else ""
     if "감사의견" in summary.columns:                  # 자동 추출값 미리 채움
         tpl["감사의견"] = summary["감사의견"]
     if "관리종목" in summary.columns:
-        tpl["관리종목"] = summary["관리종목"].map(lambda v: v != "해당없음")
+        tpl["관리종목"] = summary["관리종목"].map(admin_issue_cell)
     for c in ["유형", "HBM양산", "HBM노출도", "메모리향비중", "HBM공정확인", "위원회확인"]:
         tpl[c] = ""
+    receipt = summary.get("접수일", pd.Series("", index=summary.index))
+    tpl["근거공개일"] = pd.to_datetime(
+        receipt, format="%Y%m%d", errors="coerce").dt.strftime("%Y-%m-%d")
+    rcept = summary.get("접수번호", pd.Series("", index=summary.index))
+    tpl["근거출처"] = rcept.map(
+        lambda value: (f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={value}"
+                       if str(value).strip() else ""))
+    tpl["판정자"] = ""
+    tpl["판정상태"] = "DRAFT"
     tpl.to_csv(OUTDIR / "판정입력_템플릿.csv", index=False, encoding="utf-8-sig")
 
     print(f"\n판정 카드: {OUTDIR}\\<코드>_<종목명>.md  ({len(summary)}건)")
     print(f"입력 템플릿: {OUTDIR}\\판정입력_템플릿.csv")
-    print("  · 자동 채움: 감사의견 · 관리종목")
-    print("  · 손으로 채울 것: 유형 · HBM양산 · HBM노출도 · 메모리향비중 · HBM공정확인 · 위원회확인")
+    print("  · 자동 채움: 사업연도 · 감사의견 · DART 공시일·출처")
+    print("  · 수동 확인: 관리종목 · 유형 · HBM양산 · HBM노출도 · "
+          "메모리향비중 · HBM공정확인")
+    print("  · 위원회 입력: 위원회확인 · 판정자 · FINAL 상태")
     print("→ 카드를 읽고 빈칸만 채우면 판정 입력이 완성됩니다.")
 
 

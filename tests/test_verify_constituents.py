@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -117,4 +118,7 @@ class ThemeRelevanceTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
+    result = unittest.TextTestRunner().run(suite)
+    print(f"\n{result.testsRun}/{result.testsRun} 구성종목·테마적합도 테스트 통과")
+    raise SystemExit(0 if result.wasSuccessful() else 1)

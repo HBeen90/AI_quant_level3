@@ -70,7 +70,7 @@ class ConfigV2:
     core_ind_cap: float = 0.18         # 비앵커버킷 30% x 0.60
     sat_ind_cap: float = 0.15          # 비앵커버킷 25% x 0.60
     sat_total_cap: float = 0.18
-    rulebook_version: str = "v2.2+suspension-merger(hold 27/67 provisional)"
+    rulebook_version: str = "v2.2+suspension-merger(hold 27/67 operating)"
 
     @staticmethod
     def with_policy(name: str) -> "ConfigV2":
@@ -272,13 +272,20 @@ class AdhocManagerV2:
     flags: set = field(default_factory=set)
 
     def drift(self, day_returns: pd.Series) -> None:
-        """활성 구성종목의 수익률 결측은 0%로 조용히 대체하지 않는다(fail-closed,
-        리뷰 반영) - 결측이면 예외를 발생시켜 데이터 문제를 표면화한다."""
+        """활성 구성종목의 수익률 결측·비유한(inf)은 0%로 조용히 대체하지 않는다
+        (fail-closed, 리뷰 반영) - 데이터 문제를 예외로 표면화한다.
+
+        NaN 뿐 아니라 **inf 도 막는다**: 0원 가격에서 복구된 날의 pct_change 는
+        inf 를 내고, 그대로 곱하면 weights 가 inf -> NaN 으로 조용히 오염돼
+        캡·회전율 판정 전체가 무너진다(실패한 티도 안 난다). simulate_index 가
+        px<=0 을 거부하는 것과 동일한 규율을 이 병렬 추적 경로에도 건다."""
         r = day_returns.reindex(self.weights.index)
-        if r.isna().any():
+        inf = float("inf")
+        bad = r.isna() | r.eq(inf) | r.eq(-inf)
+        if bad.any():
             raise ValueError(
-                f"활성 구성종목 수익률 결측: {r.index[r.isna()].tolist()} - "
-                "0% 대체 금지, 가격 데이터 확인 필요")
+                f"활성 구성종목 수익률 결측·비유한: {r.index[bad].tolist()} - "
+                "0% 대체 금지, 가격 데이터 확인 필요(inf 는 0원 가격 복구 등)")
         self.weights = self.weights * (1.0 + r)
         self.weights = self.weights / self.weights.sum()
 

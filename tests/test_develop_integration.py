@@ -169,11 +169,51 @@ def test_group_migration_sat_to_core():
     ok("군 이동 위성->핵심: 기존 28%는 핵심 승격·신규 28%는 위성 편입")
 
 
+def test_selection_numeric_boolean_keeps_anchor():
+    """HBM양산 이 float 1.0(pandas 추론)으로 와도 앵커가 탈락하지 않는다.
+
+    과거 _coerce 는 str(1.0)='1.0' 이 참 집합에 없어 True 를 False 로 뒤집어,
+    삼성·SK하이닉스가 규칙0에서 조용히 탈락했다(앵커 0개 퇴화)."""
+    df = pd.DataFrame([
+        {"종목명": "삼성전자", "코드": "005930", "유형": "메모리제조",
+         "유동시총": 3e14, "HBM양산": 1.0, "HBM노출도": 0.10, "메모리향비중": 0.55,
+         "HBM공정확인": True, "위원회확인": True},
+        {"종목명": "핵심A", "코드": "100001", "유형": "장비",
+         "유동시총": 3e13, "HBM양산": 0.0, "HBM노출도": 0.50, "메모리향비중": 0.20,
+         "HBM공정확인": False, "위원회확인": False},
+    ])
+    out = selection.select_constituents(df)
+    got = out[out["코드"] == "005930"]
+    assert len(got) == 1 and got["군"].iloc[0] == "앵커", "float 1.0 앵커가 탈락"
+    assert selection._truthy("1.0") is True and selection._truthy(0.0) is False
+    ok("selection: 숫자형 Boolean(1.0/'1.0') 앵커 유지 - 조용한 탈락 차단")
+
+
+def test_weighting_verify_single_anchor_ok_but_normal_cap_enforced():
+    """앵커 1종목이면 allocate 는 40%를 배정하고 verify 는 이를 통과시킨다
+    (40% > 개별 25%는 앵커 수가 강제한 불가피 - 오탐 아님). 단 앵커 2종목 이상
+    정상 상황의 개별 상한 위반은 여전히 잡아야 한다(과잉 면제 방지)."""
+    g = np.array(["앵커", "핵심", "핵심", "핵심", "핵심", "핵심"])
+    fmc = np.array([3e6, 50e3, 40e3, 30e3, 20e3, 10e3])
+    w = weighting.allocate(g, fmc)
+    d = pd.DataFrame({"군": g, "유동시총": fmc, "편입비중": w})
+    d["IIF"] = weighting.to_iif(w, fmc)
+    assert abs(w[g == "앵커"][0] - 0.40) < 1e-9
+    assert weighting.verify(d) == [], f"앵커1 오탐: {weighting.verify(d)}"
+    g2 = np.array(["앵커", "앵커", "핵심", "핵심", "핵심", "핵심"])
+    w2 = np.array([0.30, 0.10, 0.18, 0.18, 0.16, 0.08])
+    bad = weighting.verify(pd.DataFrame({"군": g2, "편입비중": w2}))
+    assert any("앵커 개별" in m for m in bad), f"정상 상황 앵커 상한 미검출: {bad}"
+    ok("weighting.verify: 앵커1 면제·앵커2 개별상한 유지(과잉면제 없음)")
+
+
 if __name__ == "__main__":
     for fn in [test_hold_equals_entry_matches_classify, test_kr_hysteresis,
                test_adapter_delegates_to_weighting,
                test_scarce_clause_anchor_absorbs,
                test_min_constituents_kr_path, test_iif_pipeline_smoke,
-               test_group_migration_core_to_sat, test_group_migration_sat_to_core]:
+               test_group_migration_core_to_sat, test_group_migration_sat_to_core,
+               test_selection_numeric_boolean_keeps_anchor,
+               test_weighting_verify_single_anchor_ok_but_normal_cap_enforced]:
         fn()
-    print(f"\n{len(PASS)}/8 통합 테스트 통과")
+    print(f"\n{len(PASS)}/10 통합 테스트 통과")

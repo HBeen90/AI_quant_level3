@@ -12,6 +12,7 @@ from analysis.verify_judgment_snapshot import (  # noqa: E402
     EXPECTED_AS_OF,
     load_snapshot,
     run_verification,
+    verify_ledger_alignment,
     verify_source_hashes,
 )
 
@@ -19,8 +20,8 @@ from analysis.verify_judgment_snapshot import (  # noqa: E402
 def test_final_source_bundle_is_intact():
     meta = verify_source_hashes()
     assert meta["status"] == "FINAL_CROSS_SECTION"
-    assert len(meta["files"]) == 4
-    print("[OK] PDF 2종·확정 스냅샷·인계 CSV 해시 일치")
+    assert len(meta["files"]) == 5
+    print("[OK] PDF 2종·확정 스냅샷·FINAL 원장·인계 CSV 해시 일치")
 
 
 def test_33_to_7_selection_reproduces():
@@ -51,9 +52,16 @@ def test_snapshot_is_not_historical_pit():
     print("[OK] 2026-07-23 횡단면과 역사적 PIT 원장 경계 유지")
 
 
+def test_snapshot_numeric_values_match_final_ledger():
+    snapshot = load_snapshot()
+    assert verify_ledger_alignment(snapshot) == 0.0
+    print("[OK] 횡단면 HBM 노출도·메모리향 비율이 FY2025 FINAL 원장과 일치")
+
+
 if __name__ == "__main__":
     test_final_source_bundle_is_intact()
     test_33_to_7_selection_reproduces()
     test_published_weights_reproduce_within_rounding()
     test_snapshot_is_not_historical_pit()
-    print("\n4/4 확정 판정 스냅샷 테스트 통과")
+    test_snapshot_numeric_values_match_final_ledger()
+    print("\n5/5 확정 판정 스냅샷 테스트 통과")

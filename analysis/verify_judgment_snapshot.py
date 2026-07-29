@@ -20,11 +20,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src import selection, weighting  # noqa: E402
+from analysis.build_pit_snapshots import load_ledger  # noqa: E402
 
 
 DEFAULT_SNAPSHOT = ROOT / "evidence" / "judgment_snapshot_20260723.csv"
 DEFAULT_META = ROOT / "evidence" / "judgment_snapshot_20260723.meta.json"
 DEFAULT_HANDOFF = ROOT / "data" / "constituents" / "constituents_handoff_20260723.csv"
+DEFAULT_LEDGER = ROOT / "data" / "verdict_ledger.csv"
 
 EXPECTED_ROWS = 33
 EXPECTED_AS_OF = pd.Timestamp("2026-07-23")
@@ -131,6 +133,29 @@ def load_snapshot(path: Path = DEFAULT_SNAPSHOT) -> pd.DataFrame:
     return d
 
 
+def verify_ledger_alignment(snapshot: pd.DataFrame,
+                            ledger_path: Path = DEFAULT_LEDGER) -> float:
+    """횡단면 수치가 FY2025 FINAL 원장의 정본과 같은지 확인한다."""
+    ledger = load_ledger(str(ledger_path))
+    annual = ledger.loc[ledger["fiscal_year"].eq(2025)].set_index("ticker")
+    snap = snapshot.set_index("ticker")
+    if set(annual.index) != set(snap.index):
+        raise ValueError("FY2025 FINAL 원장과 횡단면 스냅샷의 종목 집합이 다릅니다")
+    max_error = 0.0
+    for col in ("hbm_exposure", "mem_ratio"):
+        left = pd.to_numeric(snap[col], errors="coerce")
+        right = pd.to_numeric(annual[col].reindex(snap.index), errors="coerce")
+        mismatch = ~np.isclose(left, right, atol=1e-12, rtol=0, equal_nan=True)
+        if mismatch.any():
+            rows = [
+                f"{ticker}:{left.loc[ticker]}!={right.loc[ticker]}"
+                for ticker in snap.index[mismatch]
+            ]
+            raise ValueError(f"횡단면-{col} FINAL 원장 불일치: {rows}")
+        max_error = max(max_error, float((left - right).abs().max()))
+    return max_error
+
+
 def classify_snapshot(snapshot: pd.DataFrame) -> pd.DataFrame:
     engine_input = pd.DataFrame({
         "종목명": snapshot["name"],
@@ -207,6 +232,7 @@ def run_verification(snapshot_path: Path = DEFAULT_SNAPSHOT,
                      handoff_path: Path = DEFAULT_HANDOFF) -> dict:
     meta = verify_source_hashes(meta_path)
     snapshot = load_snapshot(snapshot_path)
+    ledger_error = verify_ledger_alignment(snapshot)
     classified = classify_snapshot(snapshot)
     weights, max_error_pp = verify_weights(classified, handoff_path)
     selected = classified[classified["actual_group"] != "미편입"]
@@ -236,6 +262,7 @@ def run_verification(snapshot_path: Path = DEFAULT_SNAPSHOT,
         "weight_rows": weight_rows.to_dict("records"),
         "reported_weight_sum": float(weights["weight"].sum()),
         "max_weight_error_pp": max_error_pp,
+        "ledger_max_numeric_error": ledger_error,
         "source_status": meta["status"],
     }
 

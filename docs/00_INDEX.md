@@ -12,7 +12,7 @@
 | "PIT 스냅샷"이 뭔지 모르겠다 | `WHAT_IS_PIT_SNAPSHOT.md` | 15분 |
 | 판정 원장을 실제로 채운다 | `VERDICT_LEDGER_GUIDE.md` | 10분 |
 | 판정 원장 원본·재구성 계보를 확인한다 | `ledger_lineage_correction_20260729.md` | 5분 |
-| FINAL 전 팀 의결 항목을 확인한다 | `verdict_ledger_team_request_v2_20260729.md` | 5분 |
+| FINAL 전 확인 요청과 종결 결과를 본다 | `verdict_ledger_team_request_v2_20260729.md` → `verdict_ledger_final_decision_record_20260729.md` | 5분 |
 | 2026-07-23 확정 판정 재현 결과를 본다 | `JUDGMENT_SNAPSHOT_20260723_REPORT.md` | 3분 |
 | 확정 단면과 역사적 초안의 경계를 본다 | `HBM_JUDGMENT_DRAFT.md` | 5분 |
 | 상용지수 비교의 채택·참고 경계를 본다 | `commercial_index_gap_review.md` | 5분 |
@@ -23,7 +23,7 @@
 ## 발표 전 체크리스트
 
 ```powershell
-python tests/run_all.py                              # 13/13 파일 · 111 케이스
+python tests/run_all.py                              # 13/13 파일 · 113 케이스
 python analysis/verify_claims.py --fast              # 발표 문장 재현(테스트 재실행 생략)
 python analysis/verify_claims.py --scan 발표자료.md  # 금지 수치 유출 점검
 ```
@@ -54,9 +54,9 @@ python analysis/verify_claims.py --scan 발표자료.md  # 금지 수치 유출 
 
 ## 한 줄 요약
 
-**2026-07-23 확정 단면은 재현 완료, 역사적 성과의 병목은 시점별 PIT
-판정 원장입니다.** 현재 단면을 과거에 복사하지 않고 사업연도별 근거가
-채워질 때까지 성과 수치는 잠근다.
+**2026-07-23 확정 단면과 역사적 PIT 판정 원장은 재현 완료됐습니다.**
+성과 수치는 시장 데이터 커버리지와 벤치마크 계보를 확정한 뒤 전구간
+백테스트를 실행할 때까지 잠근다.
 
 ## 재현성 메모
 

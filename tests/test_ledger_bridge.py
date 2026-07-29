@@ -2,8 +2,11 @@
 """판정 입력 -> PIT 원장 브릿지의 신뢰 경계를 검증한다."""
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
+import tempfile
 
 import pandas as pd
 
@@ -14,6 +17,7 @@ from analysis.build_pit_snapshots import load_ledger  # noqa: E402
 from build_ledger_from_evidence import (  # noqa: E402
     EV_MAP,
     build_ledger,
+    file_sha256,
     normalize_ticker,
     parse_bool,
 )
@@ -247,6 +251,33 @@ def test_evidence_fetch_is_fiscal_year_bounded():
     print("[OK] 근거수집은 지정 사업연도 공시창만 조회")
 
 
+def test_cli_output_is_cross_platform_reproducible():
+    """CSV 줄바꿈과 실행환경 매니페스트를 플랫폼과 무관하게 고정한다."""
+    with tempfile.TemporaryDirectory() as tmp:
+        scaffold = os.path.join(tmp, "scaffold.csv")
+        evidence = os.path.join(tmp, "evidence.csv")
+        output = os.path.join(tmp, "ledger.csv")
+        manifest = os.path.join(tmp, "manifest.json")
+        _scaffold().to_csv(scaffold, index=False, encoding="utf-8-sig")
+        _final_evidence().to_csv(evidence, index=False, encoding="utf-8-sig")
+        p = subprocess.run([
+            sys.executable, os.path.join(ROOT, "build_ledger_from_evidence.py"),
+            "--scaffold", scaffold,
+            "--evidence", evidence,
+            "--out", output,
+            "--manifest", manifest,
+            "--code-commit", "abcdef1",
+        ], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        assert p.returncode == 0, p.stdout + p.stderr
+        assert b"\r\n" not in open(output, "rb").read()
+        meta = json.load(open(manifest, encoding="utf-8"))
+        assert meta["output"]["line_ending"] == "LF"
+        assert meta["output"]["sha256"] == file_sha256(output)
+        assert meta["builder"]["code_commit"] == "abcdef1"
+        assert meta["builder"]["python"] and meta["builder"]["pandas"]
+    print("[OK] 원장 LF 고정 · 입력/출력 해시 · 실행환경 매니페스트 기록")
+
+
 if __name__ == "__main__":
     test_blank_boolean_stays_unknown()
     test_provisional_draft_is_labeled_and_helpers_are_removed()
@@ -259,4 +290,5 @@ if __name__ == "__main__":
     test_strict_mode_rejects_unreviewed_scaffold_row()
     test_admin_lookup_failure_stays_unknown_not_false()
     test_evidence_fetch_is_fiscal_year_bounded()
-    print("\n11/11 판정 원장 브릿지 테스트 통과")
+    test_cli_output_is_cross_platform_reproducible()
+    print("\n12/12 판정 원장 브릿지 테스트 통과")

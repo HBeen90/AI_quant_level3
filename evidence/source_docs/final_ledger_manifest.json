@@ -1,0 +1,214 @@
+{
+  "status": "FINAL_INPUT_CONTRACT",
+  "lineage_level": "L09_PARTIAL",
+  "generated_at": "2026-07-29",
+  "decision_record": "docs/verdict_ledger_final_decision_record_20260729.md",
+  "rows": 215,
+  "no_data_rows": 8,
+  "tickers": 33,
+  "fiscal_years": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "counts_by_year": [
+    {
+      "fiscal_year": 2019,
+      "rows": 25,
+      "tickers": 25
+    },
+    {
+      "fiscal_year": 2020,
+      "rows": 29,
+      "tickers": 29
+    },
+    {
+      "fiscal_year": 2021,
+      "rows": 29,
+      "tickers": 29
+    },
+    {
+      "fiscal_year": 2022,
+      "rows": 33,
+      "tickers": 33
+    },
+    {
+      "fiscal_year": 2023,
+      "rows": 33,
+      "tickers": 33
+    },
+    {
+      "fiscal_year": 2024,
+      "rows": 33,
+      "tickers": 33
+    },
+    {
+      "fiscal_year": 2025,
+      "rows": 33,
+      "tickers": 33
+    }
+  ],
+  "checks": [
+    {
+      "check": "Strict loader",
+      "actual": "PASS",
+      "expected": "PASS",
+      "difference": "",
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "FINAL rows",
+      "actual": 215,
+      "expected": 215,
+      "difference": 0,
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "NO_DATA rows retained separately",
+      "actual": 8,
+      "expected": 8,
+      "difference": 0,
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "Universe tickers",
+      "actual": 33,
+      "expected": 33,
+      "difference": 0,
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "Duplicate keys",
+      "actual": 0,
+      "expected": 0,
+      "difference": 0,
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "FINAL status",
+      "actual": 215,
+      "expected": 215,
+      "difference": 0,
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "Source lineage complete",
+      "actual": 215,
+      "expected": 215,
+      "difference": 0,
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "DART receipt date tie-out",
+      "actual": 215,
+      "expected": 215,
+      "difference": 0,
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "Audit opinion complete",
+      "actual": 215,
+      "expected": 215,
+      "difference": 0,
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "Admin history ticker coverage",
+      "actual": 33,
+      "expected": 33,
+      "difference": 0,
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "Numeric ranges",
+      "actual": "PASS",
+      "expected": "PASS",
+      "difference": "",
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "Boolean columns",
+      "actual": "PASS",
+      "expected": "PASS",
+      "difference": "",
+      "status": "PASS",
+      "notes": ""
+    },
+    {
+      "check": "Judgment reviewer complete",
+      "actual": 215,
+      "expected": 215,
+      "difference": 0,
+      "status": "PASS",
+      "notes": ""
+    }
+  ],
+  "receipt_date_corrections": [
+    {
+      "ticker": "014680",
+      "fiscal_year": 2020,
+      "old_disclosed_at": "2021-03-17",
+      "new_disclosed_at": "2021-03-16",
+      "reason": "aligned to DART rcpNo receipt date"
+    },
+    {
+      "ticker": "067310",
+      "fiscal_year": 2022,
+      "old_disclosed_at": "2023-03-28",
+      "new_disclosed_at": "2023-03-27",
+      "reason": "aligned to DART rcpNo receipt date"
+    }
+  ],
+  "source_hashes": {
+    "source_ledger.xlsx": "78005590FA888B09CAEAD8DDD6FA7BAFEBC0FBF7559E054C17CF1C3DD311B010",
+    "admin_history.csv": "18228DCC92E9C17F730EA4AAED54C4EAA1E0C871DEAF1ED92A910E9D2655DB7B",
+    "scaffold.csv": "2F163118A087C8562461AB68EBD8DCFC7BE7495092E0B8D9D745C9DCF6793CA7"
+  },
+  "source_locations": {
+    "source_ledger.xlsx": {
+      "archive_path": "evidence/source_docs/source_ledger_final_20260729.xlsx",
+      "original_filename": "판정원장_작성완료_노민수.xlsx"
+    }
+  },
+  "output_hashes": {
+    "judgment_input_final.csv": "3A217442D43F80EFC9DE5E38CB8A04D37AC94F15EA7E3E80C51B61164AF9F4E6",
+    "verdict_ledger.csv": "E89BDCE90E5B27DD9B57FA0FA87C37D9FE5103923438429FDE2C0C945682247F",
+    "no_data_rows.csv": "6721D3964AB40FB84E1AF0F77BA37A0FDA1622BEAE8C2CFA19403B387BF32D42",
+    "admin_history_normalized.csv": "D52FF7012FA989F28A22307C857BCDC1416A0392841E4B7F565862506FE2F669"
+  },
+  "output_format": {
+    "verdict_ledger.csv": {
+      "encoding": "utf-8-sig",
+      "line_ending": "LF"
+    }
+  },
+  "build_environment": {
+    "base_commit": "d32fa86c235fb7e3baad12a739bd706df9fd2056",
+    "builder": "build_ledger_from_evidence.py",
+    "builder_sha256": "EB7F1DB04CA3FB248580584896D8A55FA1C4196165479529FF94D8DC8B5C5F09",
+    "python": "3.13.9",
+    "pandas": "2.3.3"
+  },
+  "independent_recollection": {
+    "status": "PENDING",
+    "required_for_final_input_contract": false,
+    "required_for_metadata_verified": true
+  },
+  "scope_note": "민수님 판정 작성본과 별도 관리종목 확인 파일을 결합해 strict 입력계약을 완성했다. 이는 제공 자료의 계보·형식·시점 정합을 검증한 결과이며, DART 원문 215건을 제3자가 독립 재수집했다는 의미는 아니다.",
+  "approval_note": "판정값의 reviewer는 원본대로 노민수로 유지했다. 파트3의 최종 조립·검증은 파트2의 실질 판정 책임을 대체하지 않는다."
+}

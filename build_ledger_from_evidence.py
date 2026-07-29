@@ -8,7 +8,10 @@ FINAL 상태가 없으면 중단한다. 검토 중인 초안은 --allow-provisio
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
+import platform
 
 import pandas as pd
 
@@ -43,6 +46,14 @@ FINAL_REQUIRED = [
     "disclosed_at", "source", "reviewer", "judgment_status", "audit_opinion",
     "admin_issue",
 ]
+
+
+def file_sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest().upper()
 
 
 def parse_bool(value):
@@ -239,7 +250,15 @@ def main() -> int:
     ap.add_argument("--fiscal-year", type=int, default=None)
     ap.add_argument("--allow-provisional", action="store_true",
                     help="DRAFT/TODO 계보를 허용한다. 확정 백테스트 입력으로 사용 금지")
+    ap.add_argument("--manifest", default=None,
+                    help="입력·출력 해시와 실행환경을 기록할 JSON 경로")
+    ap.add_argument("--code-commit", default=os.environ.get("CODE_COMMIT", ""),
+                    help="매니페스트에 기록할 코드 커밋(또는 CODE_COMMIT 환경변수)")
     args = ap.parse_args()
+
+    if args.manifest and not args.code_commit.strip():
+        print("[FAIL] --manifest 사용 시 --code-commit이 필요합니다")
+        return 1
 
     try:
         scaffold = pd.read_csv(args.scaffold, dtype={"ticker": str})
@@ -251,7 +270,41 @@ def main() -> int:
         return 1
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    ledger.to_csv(args.out, index=False, encoding="utf-8-sig")
+    ledger.to_csv(
+        args.out, index=False, encoding="utf-8-sig", lineterminator="\n")
+    if args.manifest:
+        manifest = {
+            "schema_version": 1,
+            "status": stats["status"],
+            "rows": stats["rows"],
+            "inputs": {
+                "scaffold": {
+                    "path": os.path.normpath(args.scaffold),
+                    "sha256": file_sha256(args.scaffold),
+                },
+                "evidence": {
+                    "path": os.path.normpath(args.evidence),
+                    "sha256": file_sha256(args.evidence),
+                },
+            },
+            "output": {
+                "path": os.path.normpath(args.out),
+                "sha256": file_sha256(args.out),
+                "encoding": "utf-8-sig",
+                "line_ending": "LF",
+            },
+            "builder": {
+                "path": os.path.basename(__file__),
+                "sha256": file_sha256(__file__),
+                "code_commit": args.code_commit.strip(),
+                "python": platform.python_version(),
+                "pandas": pd.__version__,
+            },
+        }
+        os.makedirs(os.path.dirname(args.manifest) or ".", exist_ok=True)
+        with open(args.manifest, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+            f.write("\n")
     print(f"[OK] {args.out} 생성 - {stats['status']} {stats['rows']}행, "
           f"미심사 제외 {stats['excluded_unreviewed']}행, "
           f"수치 UNKNOWN {stats['numeric_unknown']}행")

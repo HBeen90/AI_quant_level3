@@ -6,7 +6,7 @@ as_of,ticker,name,sector,hbm_massproduction,hbm_exposure,mem_ratio,process_confi
 2026-07-23,089030,테크윙,장비,False,0.30,0.80,,,적정,False,True,핵심,0.1800,A,,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
 2026-07-23,095340,ISC,부품,False,0.15,0.15,,,적정,False,True,미편입,,,A;C1,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
 2026-07-23,112290,와이씨켐,소재,False,0.10,0.75,True,True,적정,False,True,위성,0.0061,C,,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
-2026-07-23,005930,삼성전자,메모리제조,True,0.10,0.55,,,적정,False,True,앵커,0.2157,0,,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
+2026-07-23,005930,삼성전자,메모리제조,True,0.10,0.31,,,적정,False,True,앵커,0.2157,0,,FINAL,노민수,data/verdict_ledger.csv#FY2025,evidence/source_docs/hbm_judgment_result_20260723.pdf
 2026-07-23,394280,오픈엣지테크놀로지,설계IP,False,0.10,0.20,,,적정,False,True,미편입,,,A;C1,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
 2026-07-23,253590,네오셈,장비,False,0.05,0.90,False,,적정,False,True,미편입,,,C2,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
 2026-07-23,357780,솔브레인,소재,False,0.05,0.70,False,,적정,False,True,미편입,,,C2,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
@@ -16,7 +16,7 @@ as_of,ticker,name,sector,hbm_massproduction,hbm_exposure,mem_ratio,process_confi
 2026-07-23,102710,이엔에프테크놀로지,소재,False,0.03,0.65,False,,적정,False,True,미편입,,,C2,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
 2026-07-23,067310,하나마이크론,패키징,False,0.03,0.60,,,적정,False,True,미편입,,,A;C1,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
 2026-07-23,104830,원익머트리얼즈,소재,False,0.02,0.60,False,,적정,False,True,미편입,,,C2,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
-2026-07-23,064290,인텍플러스,장비,False,0.02,0.40,False,,적정,False,True,미편입,,,A;C1;C2,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
+2026-07-23,064290,인텍플러스,장비,False,0.00,0.40,False,,적정,False,True,미편입,,,A;C1;C2,FINAL,노민수,data/verdict_ledger.csv#FY2025,evidence/source_docs/hbm_judgment_result_20260723.pdf
 2026-07-23,061970,LB세미콘,패키징,False,0.02,0.20,False,,적정,False,True,미편입,,,A;C1;C2,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
 2026-07-23,007660,이수페타시스,기판,False,0.02,0.10,False,,적정,False,True,미편입,,,A;C1;C2,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf
 2026-07-23,425040,티이엠씨,소재,False,0.00,0.80,False,,적정,False,True,미편입,,,C2,FINAL,노민수,evidence/source_docs/hbm_judgment_values_33_20260723.pdf,evidence/source_docs/hbm_judgment_result_20260723.pdf

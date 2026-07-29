@@ -1,0 +1,4 @@
+﻿selection_date,ticker,name,listing_date,listed_asof,source_rcp_no,disclosed_at,keyword_version,hbm_hits,process_hits,discovery_reason,review_status
+2026-05-29,000001,예시신규장비,2025-11-03,true,20260316000000,2026-03-16,kw_v1,7,3,hbm_hits>=5,PART2_PENDING
+2026-05-29,000002,예시소재,2020-01-02,true,20260320000000,2026-03-20,kw_v1,2,0,임계 미달,SCREENED_OUT
+2026-05-29,000003,예시상장예정,2026-06-20,false,20260410000000,2026-04-10,kw_v1,11,6,선정일 현재 미상장,SCREENED_OUT

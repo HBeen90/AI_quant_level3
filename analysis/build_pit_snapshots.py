@@ -195,11 +195,20 @@ def market_facts(tickers: list, asof: pd.Timestamp) -> pd.DataFrame:
         if t not in cap.index:
             rows.append({"ticker": t, "listed": False})
             continue
-        oh = stock.get_market_ohlcv(adv_start, ymd, t)
-        if oh is None or oh.empty:
+        # ADV60 원천: 시가총액 일별 시계열의 '거래대금' 컬럼.
+        # pykrx 1.2.x(2026 KRX 로그인 전환 재작성)부터 get_market_ohlcv
+        # 단일종목 기간 조회에 '거래대금'이 없어졌다. get_market_cap 기간
+        # 조회는 구·신 버전 모두 (시가총액·거래량·거래대금·상장주식수)를
+        # 반환하므로 이를 단일 원천으로 쓴다. 값의 정의(일별 거래대금)는
+        # 기존과 동일하며 원천 통계(KRX)도 같다.
+        rng = stock.get_market_cap(adv_start, ymd, t)
+        if rng is None or rng.empty:
             rows.append({"ticker": t, "listed": False})
             continue
-        adv = float(oh["거래대금"].tail(ADV_DAYS).mean())
+        if "거래대금" not in rng.columns:
+            sys.exit(f"[FAIL] {t} 시가총액 시계열에 거래대금 컬럼 없음 - "
+                     "pykrx 버전 확인 (pip install -U pykrx)")
+        adv = float(rng["거래대금"].tail(ADV_DAYS).mean())
         first = stock.get_market_ohlcv("19950101", ymd, t, freq="m")
         listed_days = ((pd.Timestamp(asof) - pd.Timestamp(first.index[0])).days
                        if first is not None and len(first) else np.nan)

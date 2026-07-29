@@ -15,7 +15,7 @@ if (-not (Test-Path ".\data\verdict_ledger.csv")) {
 git add -A
 git diff --cached --quiet
 if ($LASTEXITCODE -ne 0) {
-    git commit -m "docs+data: FINAL ledger v2, governance draft, discovery contract, runbook"
+    git commit -m "chore(part3): pre-backtest auto-commit (state freeze)"
 }
 $commit = (git rev-parse HEAD)
 Write-Host "[코드 커밋] $commit"

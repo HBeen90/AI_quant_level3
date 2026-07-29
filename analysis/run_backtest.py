@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import json
 import os
 import re
 import sys
@@ -272,24 +273,94 @@ def _is_tr_name(nm: str) -> bool:
     return "TR" in re.split(r"[\s()]+", nm.upper())
 
 
-def choose_benchmark(found: list) -> tuple:
+def choose_benchmark(found: list, return_type: str = "PR") -> tuple:
     """이름 매치 후보 중 **결정론적으로** 하나를 고른다(입력 순서 무관).
 
     과거 `found[0]`은 pykrx 반환 순서에 의존해, 같은 키워드가 실행마다 다른
     지수를(때로 PR 대신 TR 을) 물어올 수 있었다 - 재현성·비교 정합성 훼손.
-    우선순위: (1) PR 계열(비 TR) (2) 이름이 짧은 것(기본 지수) (3) 시장 순위
-    (4) 티커. found = [(market, ticker, name), ...]."""
+    우선순위: (1) 요청 계열(PR/TR) (2) 이름이 짧은 것(기본 지수)
+    (3) 시장 순위 (4) 티커. found = [(market, ticker, name), ...]."""
+    if return_type not in {"PR", "TR"}:
+        raise ValueError(f"return_type은 PR/TR이어야 합니다: {return_type}")
     rank = {m: i for i, m in enumerate(_BM_MARKET_ORDER)}
-    return sorted(found, key=lambda it: (_is_tr_name(it[2]), len(it[2]),
+    want_tr = return_type == "TR"
+    return sorted(found, key=lambda it: (_is_tr_name(it[2]) != want_tr,
+                                         len(it[2]),
                                          rank.get(it[0], 99), it[1]))[0]
 
 
-def fetch_benchmark(start: str, end: str, keyword: str = "반도체",
-                    cache: str | None = None) -> pd.Series:
-    """벤치마크 지수 종가. 이름에 keyword가 든 KRX 지수를 찾아 쓴다.
+#: 위원회 관리 벤치마크 지정 파일(기본). --benchmark-config 로 덮을 수 있다.
+DEFAULT_BENCHMARK_CONFIG = os.path.join(HERE, "data", "benchmark.yaml")
 
-    지수 코드를 하드코딩하면 pykrx·KRX 개편 때 조용히 틀린 지수를 물어온다.
-    이름으로 조회하고 **무엇을 골랐는지 콘솔에 남긴다**(재현 기록).
+
+def load_benchmark_config(path: str | None):
+    """벤치마크 지정 설정(.yaml/.json) 로드. 파일이 없으면 None(→ 이름기반 잠정)."""
+    if not path or not os.path.exists(path):
+        return None
+    if path.endswith((".yaml", ".yml")):
+        try:
+            import yaml
+        except ImportError:
+            sys.exit("[FAIL] benchmark 설정이 .yaml 인데 PyYAML 미설치 - "
+                     "pip install pyyaml 또는 .json 형식을 쓰십시오")
+        with open(path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def resolve_benchmark_spec(cfg: dict | None, mode: str = "pr",
+                           default_keyword: str = "반도체") -> dict:
+    """설정 + 산출 모드 -> 벤치마크 지정 스펙(코드 조회 없이 순수 결정).
+
+    · status=CONFIRMED 이고 계열 코드가 있으면 코드 고정:
+        {"status":"confirmed","code":..,"name":..,"return_type":"PR"|"TR"}
+    · 그 외에는 이름기반 잠정:
+        {"status":"provisional","keyword":..,"return_type":..}
+    계열은 --mode 에 맞춘다(gross_tr→TR, 그 외→PR). PR 지수를 TR 벤치와
+    비교하면 배당 기여만큼 왜곡되므로, 여기서 pr_code/tr_code 를 자동 선택한다.
+    CONFIRMED 인데 코드·이름·확정 계보가 비면 fail-closed.
+    """
+    rt = "TR" if mode == "gross_tr" else "PR"          # both -> 헤드라인 PR
+    if not cfg:
+        return {"status": "provisional", "keyword": default_keyword,
+                "return_type": rt}
+    kw = str(cfg.get("fallback_keyword") or default_keyword)
+    if str(cfg.get("status", "")).upper() != "CONFIRMED":
+        return {"status": "provisional", "keyword": kw, "return_type": rt}
+    headline = str(cfg.get("headline_return_type") or "").upper()
+    if headline not in {"PR", "TR"}:
+        sys.exit("[FAIL] 벤치마크 CONFIRMED 이나 headline_return_type이 PR/TR이 아닙니다")
+    effective_date = str(cfg.get("effective_date") or "").strip()
+    resolved_by = str(cfg.get("resolved_by") or "").strip()
+    if not effective_date or pd.isna(pd.to_datetime(effective_date, errors="coerce")):
+        sys.exit("[FAIL] 벤치마크 CONFIRMED 이나 effective_date가 비었거나 잘못됐습니다")
+    if not resolved_by:
+        sys.exit("[FAIL] 벤치마크 CONFIRMED 이나 resolved_by가 비었습니다")
+    prim = cfg.get("primary") or {}
+    code_field = "tr_code" if rt == "TR" else "pr_code"
+    name_field = "tr_name" if rt == "TR" else "pr_name"
+    code = str(prim.get(code_field) or "").strip()
+    # 기존 primary.name 설정은 PR/TR 표기명이 같은 지수에 한해 하위 호환한다.
+    name = str(prim.get(name_field) or prim.get("name") or "").strip()
+    if not code:
+        sys.exit(f"[FAIL] 벤치마크 status=CONFIRMED 이나 primary.{code_field} 가 비었습니다"
+                 f"({rt} 계열) - 데이터담당이 실제 지수 코드를 기입해야 합니다")
+    if not name:
+        sys.exit(f"[FAIL] 벤치마크 CONFIRMED 이나 primary.{name_field} 이 비었습니다"
+                 " - 코드-이름 대조가 불가합니다")
+    return {"status": "confirmed", "code": code, "name": name, "return_type": rt}
+
+
+def fetch_benchmark(start: str, end: str, keyword: str = "반도체",
+                    cache: str | None = None, mode: str = "pr",
+                    config_path: str | None = None) -> pd.Series:
+    """벤치마크 지수 종가.
+
+    우선순위: benchmark.yaml 이 status=CONFIRMED 면 **코드로 고정 조회**하고
+    조회된 지수명이 지정명과 다르면 중단(KRX 코드 개편 방어). 미확정이면 이름기반
+    '잠정' 선택을 하되 공식 발표 금지 경고를 남긴다. --mode 에 맞춰 PR/TR 계열을
+    선택한다(config_path 기본 = data/benchmark.yaml).
     """
     if cache and os.path.exists(cache):
         s = pd.read_csv(cache, index_col=0, parse_dates=True).iloc[:, 0]
@@ -314,34 +385,76 @@ def fetch_benchmark(start: str, end: str, keyword: str = "반도체",
                   "지수 출범이 늦거나 캐시가 낡았을 수 있음 - 상관계수는 공통구간만 사용.")
         print(f"[캐시] 벤치마크 재사용: {cache}")
         return s
+    cfg = load_benchmark_config(config_path if config_path is not None
+                                else DEFAULT_BENCHMARK_CONFIG)
+    spec = resolve_benchmark_spec(cfg, mode, default_keyword=keyword)
     try:
         from pykrx import stock
     except ImportError:
         sys.exit("[FAIL] pykrx 미설치")
+
+    if spec["status"] == "confirmed":                  # 코드 고정(공식)
+        code, name, rt = spec["code"], spec["name"], spec["return_type"]
+        got = stock.get_index_ticker_name(code)
+        if got is None or str(got).strip() != name:    # 코드->이름 대조(개편 방어)
+            sys.exit(f"[FAIL] 벤치마크 코드 {code} 의 지수명이 '{got}' 로 지정명 "
+                     f"'{name}' 와 다릅니다 - KRX 코드 개편 가능. benchmark.yaml 재확인")
+        print(f"[벤치마크 확정] {code} {name} · {rt} 계열 (benchmark.yaml)")
+        df = stock.get_index_ohlcv(start, end, code)
+        s = df["종가"].astype(float)
+        s.index = pd.DatetimeIndex(s.index); s.name = name
+        if cache:
+            s.to_frame().to_csv(cache, encoding="utf-8-sig")
+        return s
+
+    # 미확정 -> 이름기반 잠정 선택(공식 발표 금지)
+    kw = spec["keyword"]
+    print("[벤치마크 잠정-미확정] benchmark.yaml status!=CONFIRMED - 이름기반 임시 "
+          "선택입니다. 이 벤치마크로 산출한 추종오차·상관계수는 공식 수치가 "
+          "아닙니다(위원회 코드 확정 필요).")
     found = []
     for market in ("KOSPI", "KOSDAQ", "KRX", "테마"):
         try:
             for t in stock.get_index_ticker_list(market=market):
                 nm = stock.get_index_ticker_name(t)
-                if keyword in nm:
+                if kw in nm:
                     found.append((market, t, nm))
         except Exception:
             continue
     if not found:
-        sys.exit(f"[FAIL] '{keyword}' 포함 지수를 못 찾음 - --benchmark-keyword 확인")
+        sys.exit(f"[FAIL] '{kw}' 포함 지수를 못 찾음 - benchmark.yaml fallback_keyword 확인")
     print("[벤치마크 후보]")
     for mk, t, nm in found:
         print(f"   {mk:6s} {t}  {nm}")
-    mk, tkr, nm = choose_benchmark(found)
-    print(f"[벤치마크 채택] {mk} {tkr} {nm}  "
-          f"(결정론적 선택: PR 계열 우선·최단명·시장순 - 후보 순서 무관)")
+    rt = spec["return_type"]
+    mk, tkr, nm = choose_benchmark(found, rt)
+    print(f"[벤치마크 채택(잠정)] {mk} {tkr} {nm}  "
+          f"({rt} 우선·최단명·시장순)")
     df = stock.get_index_ohlcv(start, end, tkr)
     s = df["종가"].astype(float)
-    s.index = pd.DatetimeIndex(s.index)
-    s.name = nm
+    s.index = pd.DatetimeIndex(s.index); s.name = nm
     if cache:
         s.to_frame().to_csv(cache, encoding="utf-8-sig")
     return s
+
+
+def fetch_benchmarks(start: str, end: str, keyword: str,
+                     cache: str | None, mode: str,
+                     config_path: str | None) -> dict[str, pd.Series]:
+    """요청 모드별 벤치마크를 조회한다. both는 PR/TR을 분리한다."""
+    modes = ("pr", "gross_tr") if mode == "both" else (mode,)
+    result = {}
+    for current in modes:
+        current_cache = cache
+        if cache and mode == "both":
+            root, ext = os.path.splitext(cache)
+            suffix = "tr" if current == "gross_tr" else "pr"
+            current_cache = f"{root}_{suffix}{ext or '.csv'}"
+        result[current] = fetch_benchmark(
+            start, end, keyword, current_cache,
+            mode=current, config_path=config_path,
+        )
+    return result
 
 
 # ----------------------------------------------------------------------
@@ -553,7 +666,11 @@ def main() -> int:
                     help="mid | none,narrow,mid,wide | all")
     ap.add_argument("--prices-cache", default=None)
     ap.add_argument("--benchmark-cache", default=None)
-    ap.add_argument("--benchmark-keyword", default="반도체")
+    ap.add_argument("--benchmark-keyword", default="반도체",
+                    help="benchmark.yaml 미확정 시 이름기반 잠정 선택 키워드")
+    ap.add_argument("--benchmark-config", default=None,
+                    help="벤치마크 지정 파일(기본 data/benchmark.yaml). "
+                         "status=CONFIRMED·코드 기입 시 코드로 고정")
     ap.add_argument("--no-benchmark", action="store_true")
     ap.add_argument("--require-lineage", action="store_true",
                     help="데이터 계약 v2 계보 컬럼 5개를 강제")
@@ -610,9 +727,12 @@ def main() -> int:
     if a.coverage_only:
         return 0
 
-    bench = None
+    benchmarks = {}
     if not a.no_benchmark:
-        bench = fetch_benchmark(start, end, a.benchmark_keyword, a.benchmark_cache)
+        benchmarks = fetch_benchmarks(
+            start, end, a.benchmark_keyword, a.benchmark_cache,
+            a.mode, a.benchmark_config,
+        )
 
     divs = load_dividends(a.dividends, px)
     if a.mode in ("gross_tr", "both") and divs is None:
@@ -626,7 +746,8 @@ def main() -> int:
             sys.exit(f"[FAIL] 알 수 없는 정책: {nm} (가능: {list(BUFFER_POLICIES)})")
         print(f"\n=== 정책 '{nm}' 실행 ===")
         base_mode = "pr" if a.mode in ("pr", "both") else "gross_tr"
-        results[nm] = run_one(px, snaps, adhoc, ConfigV2.with_policy(nm), bench,
+        results[nm] = run_one(px, snaps, adhoc, ConfigV2.with_policy(nm),
+                              benchmarks.get(base_mode),
                               mode=base_mode,
                               divs=None if base_mode == "pr" else divs,
                               emergency_reviews=emergency,
@@ -644,7 +765,8 @@ def main() -> int:
 
     if a.mode == "both":                       # PR·TR 병기 (제6조)
         cfg_m = ConfigV2.with_policy(main_name)
-        r_tr = run_one(px, snaps, adhoc, cfg_m, bench, mode="gross_tr",
+        r_tr = run_one(px, snaps, adhoc, cfg_m,
+                       benchmarks.get("gross_tr"), mode="gross_tr",
                        divs=divs, emergency_reviews=emergency,
                        suspensions=suspensions)
         pr_lv, tr_lv = r["bt"]["level"], r_tr["bt"]["level"]

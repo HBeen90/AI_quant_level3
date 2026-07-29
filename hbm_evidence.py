@@ -105,7 +105,9 @@ def annual_report(dart, code: str, fiscal_year: int):
     start = f"{fiscal_year + 1}-01-01"
     end = f"{fiscal_year + 1}-12-31"
     try:
-        lst = dart.list(code, start=start, end=end, kind="A")
+        # OpenDartReader defaults to final=True, which hides original filings
+        # when a corrected report exists. PIT reconstruction must see both.
+        lst = dart.list(code, start=start, end=end, kind="A", final=False)
     except Exception:
         return None
     if lst is None or len(lst) == 0:
@@ -115,7 +117,9 @@ def annual_report(dart, code: str, fiscal_year: int):
         return None
     original = hit[~hit["report_nm"].astype(str).str.contains("정정", na=False)]
     chosen = original if len(original) else hit
-    r = chosen.sort_values("rcept_dt", ascending=True).iloc[0]
+    r = chosen.sort_values(
+        ["rcept_dt", "rcept_no"], ascending=[True, True]
+    ).iloc[0]
     return str(r["report_nm"]).strip(), str(r["rcept_no"]), str(r["rcept_dt"])
 
 

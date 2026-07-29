@@ -41,6 +41,7 @@ TRUE_VALUES = {"true", "1", "y", "yes", "참", "t"}
 FALSE_VALUES = {"false", "0", "n", "no", "거짓", "f"}
 FINAL_REQUIRED = [
     "disclosed_at", "source", "reviewer", "judgment_status", "audit_opinion",
+    "admin_issue",
 ]
 
 
@@ -151,6 +152,11 @@ def build_ledger(scaffold: pd.DataFrame, evidence: pd.DataFrame,
             raise ValueError(f"확정 모드 evidence 계보 컬럼 누락: {missing_cols}")
         if ev["judgment_status"].astype(str).str.upper().ne("FINAL").any():
             raise ValueError("확정 모드는 모든 evidence 행의 판정상태가 FINAL이어야 합니다")
+        if ev["admin_issue"].isna().any():
+            bad = ev.loc[ev["admin_issue"].isna(), ["ticker", "fiscal_year"]]
+            raise ValueError(
+                "확정 모드 admin_issue UNKNOWN: "
+                f"{bad.astype(str).agg('/'.join, axis=1).tolist()}")
         for col in ("source", "reviewer", "audit_opinion"):
             if ev[col].isna().any() or ev[col].astype(str).str.strip().eq("").any():
                 raise ValueError(f"확정 모드 {col} 공란")

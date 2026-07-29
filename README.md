@@ -254,6 +254,7 @@ python analysis\verify_judgment_snapshot.py --report docs\JUDGMENT_SNAPSHOT_2026
 확정 백테스트에는 사업연도별 실제 DART 공개일·출처, 판정자, 감사의견,
 당시 관리종목 상태와 `judgment_status=FINAL`이 필요하다. 2026-07-23
 판정값을 과거 심사일에 복사하면 look-ahead이므로 금지한다.
+관리종목 이력 공란은 `False`가 아니라 `UNKNOWN`이며, strict 모드에서 중단한다.
 
 ```powershell
 # 역사적 초안 검토: 결과를 성과 발표에 사용하지 않는다.
@@ -270,3 +271,16 @@ python analysis\build_pit_snapshots.py --ledger data\verdict_ledger.csv --out da
 확인을 확정하고, 위원회가 `committee_ok`를 확정한다. 파트3은 해당 값을
 추정하지 않고 그대로 소비한다. 세부 절차는
 `docs/VERDICT_LEDGER_GUIDE.md`를 따른다.
+
+## 7. 벤치마크 실행 경계
+
+`data/benchmark.yaml`은 PR/TR별 실제 코드·정확한 표기명·확정일·결의
+근거가 모두 채워질 때만 `CONFIRMED`로 바꾼다. 그 전의 이름 검색 결과와
+상관계수·추적오차는 잠정 수치다. `--mode both`는 PR과 TR 벤치마크를
+각각 조회하며 캐시도 `*_pr.csv`, `*_tr.csv`로 분리한다. 헤드라인은 PR이고
+TR은 실제 공통 관측기간의 보조 결과다. 확정 근거와 남은 절차는
+`docs/benchmark_confirmation_memo.md`에 정리했다.
+
+```powershell
+python analysis\resolve_benchmark_code.py
+```

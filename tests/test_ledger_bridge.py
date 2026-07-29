@@ -12,6 +12,7 @@ sys.path.insert(0, ROOT)
 
 from analysis.build_pit_snapshots import load_ledger  # noqa: E402
 from build_ledger_from_evidence import (  # noqa: E402
+    EV_MAP,
     build_ledger,
     normalize_ticker,
     parse_bool,
@@ -120,6 +121,20 @@ def test_strict_mode_builds_auditable_final_row():
     print("[OK] 완전한 계보를 가진 FINAL 원장 생성")
 
 
+def test_strict_mode_rejects_unknown_admin_issue():
+    """관리종목 이력 미확인을 '해당 없음(False)'으로 확정하지 않는다."""
+    evidence = _final_evidence()
+    source_col = next(k for k, v in EV_MAP.items() if v == "admin_issue")
+    evidence[source_col] = evidence[source_col].astype(object)
+    evidence.loc[0, source_col] = ""
+    try:
+        build_ledger(_scaffold(), evidence)
+        raise AssertionError("admin_issue UNKNOWN이 FINAL 원장에 진입함")
+    except ValueError as exc:
+        assert "admin_issue UNKNOWN" in str(exc)
+    print("[OK] 관리종목 이력 UNKNOWN은 FINAL 원장 진입 차단")
+
+
 def test_sector_update_is_keyed_by_fiscal_year():
     evidence = pd.concat([
         _final_evidence(2024).assign(유형="구유형"),
@@ -217,9 +232,9 @@ def test_admin_lookup_failure_stays_unknown_not_false():
 
 def test_evidence_fetch_is_fiscal_year_bounded():
     class FakeDart:
-        def list(self, code, start, end, kind):
-            assert (code, start, end, kind) == (
-                "000001", "2026-01-01", "2026-12-31", "A")
+        def list(self, code, start, end, kind, final):
+            assert (code, start, end, kind, final) == (
+                "000001", "2026-01-01", "2026-12-31", "A", False)
             return pd.DataFrame([
                 {"report_nm": "[정정]사업보고서 (2025.12)",
                  "rcept_no": "2", "rcept_dt": "20260401"},
@@ -237,10 +252,11 @@ if __name__ == "__main__":
     test_provisional_draft_is_labeled_and_helpers_are_removed()
     test_strict_mode_rejects_missing_lineage()
     test_strict_mode_builds_auditable_final_row()
+    test_strict_mode_rejects_unknown_admin_issue()
     test_sector_update_is_keyed_by_fiscal_year()
     test_pit_loader_rejects_draft_without_explicit_flag()
     test_string_boolean_scaffold_does_not_crash_merge()
     test_strict_mode_rejects_unreviewed_scaffold_row()
     test_admin_lookup_failure_stays_unknown_not_false()
     test_evidence_fetch_is_fiscal_year_bounded()
-    print("\n10/10 판정 원장 브릿지 테스트 통과")
+    print("\n11/11 판정 원장 브릿지 테스트 통과")

@@ -82,6 +82,10 @@ python analysis\verify_judgment_snapshot.py --report docs\JUDGMENT_SNAPSHOT_2026
 python hbm_evidence.py --input universe_code.csv --fiscal-year 2025
 ```
 
+`hbm_evidence.py`의 사업연도 조회는 `final=False`로 원본·정정공시를 모두
+조회한 뒤 최초 접수본을 선택해야 합니다. 이 인자가 없는 구판 수집기는
+룩어헤드를 재발시킬 수 있으므로 사용하지 않습니다.
+
 2. 생성된 `evidence/판정입력_템플릿.csv`에 판정값·판정자·위원회 확인을
    입력합니다. `committee_ok`는 위원회 확인 전에 미리 `True`로 두지 않습니다.
 

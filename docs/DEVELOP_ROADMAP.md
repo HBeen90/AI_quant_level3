@@ -84,8 +84,8 @@ PIT 규율이 실제 편입 결과를 바꾼다는 것까지 검증합니다.
 - **`--policy all`이 버퍼 4안을 동일 조건으로 재실행**합니다. 지금은 합성
   데이터(`sensitivity_v2.py`)로만 있는 27/67 근거를 실측으로 바꾸는 경로입니다.
   선택 기준은 기존 원칙을 유지했습니다 — CAGR 단독으로 고르지 않습니다.
-- 벤치마크 지수를 **코드가 아니라 이름으로** 찾고, 무엇을 골랐는지 콘솔에
-  남깁니다. 지수 코드 하드코딩은 KRX 개편 때 조용히 틀린 지수를 물어옵니다.
+- `data/benchmark.yaml`이 `CONFIRMED`이면 코드로 고정 조회하고 지수명을
+  대조합니다. 미확정일 때만 이름으로 잠정 선택하며 공식 수치로 사용하지 않습니다.
 
 ### 2-4. `index_calc.build_index_series()` — 접합 노트 3-2 이행
 
@@ -275,11 +275,11 @@ docs/00_INDEX.md                     신규  문서 진입점
 
 ## 7. 현재 상태
 
-**13개 파일 107개 테스트 통과 · 확정 단면 교차검증·판정 원장 경계·발표
+**13개 파일 111개 테스트 통과 · 확정 단면 교차검증·판정 원장 경계·발표
 문장 등록부 회귀 포함**
 
 ```powershell
-python tests/run_all.py                              # 13/13 파일 · 107 케이스
+python tests/run_all.py                              # 13/13 파일 · 111 케이스
 python analysis/verify_judgment_snapshot.py          # 2026-07-23 33→7·비중 재현
 python analysis/verify_claims.py                     # 발표 문장 재현
 python analysis/verify_claims.py --scan 발표자료.md  # 금지 수치 유출 점검

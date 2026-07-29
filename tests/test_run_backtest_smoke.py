@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -22,8 +23,10 @@ import contextlib  # noqa: E402
 import io  # noqa: E402
 
 from analysis.run_backtest import (choose_benchmark, coverage_report,  # noqa: E402
-                                   fetch_benchmark, fetch_prices, load_snapshots,
-                                   theme_relevance_history)
+                                   fetch_benchmark, fetch_benchmarks, fetch_prices,
+                                   load_benchmark_config, load_snapshots,
+                                   resolve_benchmark_spec, theme_relevance_history)
+from analysis.resolve_benchmark_code import classify_target_name  # noqa: E402
 from analysis import capacity_v2  # noqa: E402
 from backtest.backtest import correlation  # noqa: E402
 
@@ -230,6 +233,60 @@ def test_capacity_real_delta_w_path_is_wired():
     print(f"[OK] capacity_v2 정기·캡 재생 |Δw| 경로({len(td)}행·공식 재현)")
 
 
+def test_benchmark_config_fixes_code_and_matches_series():
+    """벤치마크 지정 파일: CONFIRMED 시 코드 고정·PR/TR 계열 매칭·공란 fail-closed.
+    미확정(PROVISIONAL) 시 이름기반 잠정으로 떨어진다."""
+    # 동봉 템플릿은 PROVISIONAL 이어야 한다(위원회 미확정 상태로 출하)
+    cfg_path = os.path.join(HERE, "data", "benchmark.yaml")
+    cfg = load_benchmark_config(cfg_path)
+    assert cfg is not None and str(cfg["status"]).upper() == "PROVISIONAL", \
+        "출하 템플릿은 PROVISIONAL(위원회 미확정)이어야 함"
+    assert resolve_benchmark_spec(cfg, "pr")["status"] == "provisional"
+
+    # CONFIRMED: 모드에 따라 PR/TR 코드 자동 선택
+    conf = {"status": "CONFIRMED", "fallback_keyword": "반도체",
+            "headline_return_type": "PR", "effective_date": "2026-07-28",
+            "resolved_by": "지수위원회 2026-07-28",
+            "primary": {"pr_name": "KRX 반도체", "tr_name": "KRX 반도체 TR",
+                        "pr_code": "1KRX01", "tr_code": "1KRX01T"}}
+    assert resolve_benchmark_spec(conf, "pr") == \
+        {"status": "confirmed", "code": "1KRX01", "name": "KRX 반도체", "return_type": "PR"}
+    assert resolve_benchmark_spec(conf, "gross_tr") == \
+        {"status": "confirmed", "code": "1KRX01T", "name": "KRX 반도체 TR",
+         "return_type": "TR"}
+    assert resolve_benchmark_spec(conf, "both")["return_type"] == "PR"   # both→헤드라인 PR
+
+    # CONFIRMED 인데 해당 계열 코드/이름이 비면 중단
+    base = {"status": "CONFIRMED", "headline_return_type": "PR",
+            "effective_date": "2026-07-28", "resolved_by": "회의록",
+            "primary": {"pr_name": "KRX 반도체", "pr_code": "1KRX01"}}
+    for bad in (
+        {**base, "primary": {"pr_name": "KRX 반도체", "pr_code": ""}},
+        {**base, "primary": {"pr_name": "", "pr_code": "1KRX01"}},
+        {**base, "effective_date": ""},
+        {**base, "resolved_by": ""},
+    ):
+        try:
+            resolve_benchmark_spec(bad, "pr")
+            raise AssertionError("코드/이름 공란 CONFIRMED 가 통과함")
+        except SystemExit:
+            pass
+    # 설정 없음 → 전달 키워드로 잠정
+    assert resolve_benchmark_spec(None, "pr", default_keyword="2차전지") == \
+        {"status": "provisional", "keyword": "2차전지", "return_type": "PR"}
+    print("[OK] 벤치마크 코드 고정·PR/TR 매칭·공란 fail-closed·잠정 폴백")
+
+
+def test_benchmark_resolver_aliases_and_distinct_series_names():
+    """resolver는 한·영 표기를 허용하되 부분일치로 코드를 확정하지 않는다."""
+    assert classify_target_name("KRX 반도체") == "PR"
+    assert classify_target_name("KRX Semicon") == "PR"
+    assert classify_target_name("KRX 반도체 TR") == "TR"
+    assert classify_target_name("  KRX   Semicon TR  ") == "TR"
+    assert classify_target_name("KRX 반도체 선물") is None
+    print("[OK] 벤치마크 resolver 한·영 별칭·PR/TR 표기 분리")
+
+
 def test_benchmark_choice_is_deterministic_and_prefers_pr():
     """벤치마크 선택이 후보 순서에 무관하고 PR(비 TR) 최단명을 고른다."""
     cands = [("KRX", "1", "KRX 반도체 TR"),          # TR - 배제 우선
@@ -240,10 +297,26 @@ def test_benchmark_choice_is_deterministic_and_prefers_pr():
     assert chosen == ("KRX", "3", "KRX 반도체"), chosen
     # 입력 순서를 뒤집어도 같은 선택(결정론)
     assert choose_benchmark(list(reversed(cands))) == chosen
+    assert choose_benchmark(cands, "TR") == ("테마", "4", "반도체 테마 TR")
     # 전부 TR 뿐이면 그중 결정론적으로 하나(최단명 → KRX)
     only_tr = [("KOSPI", "8", "KOSPI 반도체 TR"), ("KRX", "9", "KRX 반도체 TR")]
     assert choose_benchmark(only_tr) == ("KRX", "9", "KRX 반도체 TR")
     print("[OK] 벤치마크 선택 결정론·PR 우선(후보 순서 무관)")
+
+
+def test_both_mode_fetches_distinct_pr_tr_benchmarks_and_caches():
+    """both 모드는 PR 한 계열을 두 번 쓰지 않고 PR/TR을 각각 조회한다."""
+    pr = pd.Series([100.0], index=[pd.Timestamp("2026-01-02")], name="PR")
+    tr = pd.Series([101.0], index=[pd.Timestamp("2026-01-02")], name="TR")
+    with patch("analysis.run_backtest.fetch_benchmark",
+               side_effect=[pr, tr]) as mocked:
+        got = fetch_benchmarks(
+            "20260101", "20261231", "반도체", "cache.csv", "both", "bm.yaml")
+    assert got["pr"] is pr and got["gross_tr"] is tr
+    calls = mocked.call_args_list
+    assert calls[0].args[3] == "cache_pr.csv" and calls[0].kwargs["mode"] == "pr"
+    assert calls[1].args[3] == "cache_tr.csv" and calls[1].kwargs["mode"] == "gross_tr"
+    print("[OK] both 모드 PR/TR 별도 조회·캐시 분리")
 
 
 def test_price_cache_staleness_fail_closed_benchmark_warns():
@@ -379,9 +452,12 @@ if __name__ == "__main__":
     test_correlation_does_not_fill_missing_returns()
     test_capacity_real_delta_w_path_is_wired()
     test_capacity_adv_duplicate_ticker_fails_closed()
+    test_benchmark_config_fixes_code_and_matches_series()
+    test_benchmark_resolver_aliases_and_distinct_series_names()
     test_benchmark_choice_is_deterministic_and_prefers_pr()
+    test_both_mode_fetches_distinct_pr_tr_benchmarks_and_caches()
     test_price_cache_staleness_fail_closed_benchmark_warns()
     test_theme_relevance_is_anchor_weight_invariant()
     test_theme_relevance_alert_and_degenerate()
     test_theme_relevance_launch_calibration()
-    print("\n13/13 드라이버 스모크 통과 - pykrx 없이 전 배선 검증 완료")
+    print("\n16/16 드라이버 스모크 통과 - pykrx 없이 전 배선 검증 완료")

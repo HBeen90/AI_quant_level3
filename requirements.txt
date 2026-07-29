@@ -3,6 +3,7 @@
 pandas>=2.0
 numpy>=1.24
 pykrx>=1.0.45          # 시세·시가총액 수집 (run_backtest / build_pit_snapshots)
+pyyaml>=6.0           # 벤치마크 지정 파일(data/benchmark.yaml) 파싱 - .json 사용 시 불필요
 pytest>=7.0            # tests (tests/run_all.py 는 pytest 없이도 동작)
 
 # 대시보드 (streamlit run app.py)

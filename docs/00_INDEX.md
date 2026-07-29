@@ -1,6 +1,6 @@
 # 문서 안내 — 어디부터 읽나
 
-문서가 10개로 늘었습니다. 목적별 진입점입니다.
+목적별 진입점입니다.
 
 ## 상황별
 
@@ -11,15 +11,19 @@
 | 다음에 뭘 할지 정한다 | `DEVELOP_ROADMAP.md` (1절 → 7절) | 15분 |
 | "PIT 스냅샷"이 뭔지 모르겠다 | `WHAT_IS_PIT_SNAPSHOT.md` | 15분 |
 | 판정 원장을 실제로 채운다 | `VERDICT_LEDGER_GUIDE.md` | 10분 |
+| 판정 원장 원본·재구성 계보를 확인한다 | `ledger_lineage_correction_20260729.md` | 5분 |
+| FINAL 전 팀 의결 항목을 확인한다 | `verdict_ledger_team_request_v2_20260729.md` | 5분 |
 | 2026-07-23 확정 판정 재현 결과를 본다 | `JUDGMENT_SNAPSHOT_20260723_REPORT.md` | 3분 |
 | 확정 단면과 역사적 초안의 경계를 본다 | `HBM_JUDGMENT_DRAFT.md` | 5분 |
+| 상용지수 비교의 채택·참고 경계를 본다 | `commercial_index_gap_review.md` | 5분 |
+| 공식 벤치마크의 확정 조건을 본다 | `benchmark_confirmation_memo.md` | 5분 |
 | 외부 리뷰를 받았다 | `REVIEW_AUDIT.md` | 15분 |
 | 대시보드를 켠다 | `../RUN_APP.md` | 2분 |
 
 ## 발표 전 체크리스트
 
 ```powershell
-python tests/run_all.py                              # 13/13 파일 · 107 케이스
+python tests/run_all.py                              # 13/13 파일 · 111 케이스
 python analysis/verify_claims.py --fast              # 발표 문장 재현(테스트 재실행 생략)
 python analysis/verify_claims.py --scan 발표자료.md  # 금지 수치 유출 점검
 ```
@@ -46,6 +50,7 @@ python analysis/verify_claims.py --scan 발표자료.md  # 금지 수치 유출 
 | `python analysis/audit_dashboard_numbers.py` | 대시보드 표시 수치 검산 |
 | `python analysis/index_calendar.py` | 정기변경 일정이 조문에서 재생 |
 | `python analysis/verify_judgment_snapshot.py` | 2026-07-23 확정 33종목 판정·7종목 비중 재현 |
+| `python analysis/resolve_benchmark_code.py` | KRX 반도체 PR/TR 코드·이름·시계열 확인 |
 
 ## 한 줄 요약
 

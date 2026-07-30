@@ -192,6 +192,28 @@ def test_drift_missing_return_fails_closed():
     ok("drift 수익률 결측 fail-closed")
 
 
+def test_drift_infinite_return_fails_closed():
+    """활성 종목 수익률 inf(0원 가격 복구 등) -> 조용한 NaN 오염 대신 예외.
+
+    과거 가드는 NaN 만 막아, inf 를 곱하면 weights 가 inf -> NaN 으로 오염된 채
+    캡·회전율 판정이 이어졌다(실패한 티도 안 남). +inf 와 -inf 둘 다 막는지 본다.
+    """
+    out = regular_rebalance_v2(snap(BASE), set())
+    for bad_val in (np.inf, -np.inf):
+        vm = AdhocManagerV2(out["weights"].copy(),
+                            out["members"].set_index("ticker")["group"].copy())
+        r = pd.Series(0.01, index=out["weights"].index)
+        r.loc["100001"] = bad_val
+        try:
+            vm.drift(r)
+            raise AssertionError(f"{bad_val} 이 통과됨 - inf 미차단")
+        except ValueError as e:
+            assert "100001" in str(e)
+        # 오염 여부 직접 확인: 예외로 막혔으므로 weights 는 유한·정규화 유지
+        assert vm.weights.notna().all() and abs(vm.weights.sum() - 1) < 1e-12
+    ok("drift 수익률 inf(±) fail-closed - 조용한 NaN 오염 차단")
+
+
 if __name__ == "__main__":
     for fn in [test_entry_boundary, test_hold_boundary_wide,
                test_hard_screen_overrides_buffer,
@@ -199,6 +221,7 @@ if __name__ == "__main__":
                test_adhoc_no_replacement, test_under_min_continuity,
                test_policy_turnover_ordering,
                test_satellite_admitted_without_exposure,
-               test_drift_missing_return_fails_closed]:
+               test_drift_missing_return_fails_closed,
+               test_drift_infinite_return_fails_closed]:
         fn()
-    print(f"\n{len(PASS)}/9 테스트 통과 - v2 명세 검증 완료")
+    print(f"\n{len(PASS)}/10 테스트 통과 - v2 명세 검증 완료")

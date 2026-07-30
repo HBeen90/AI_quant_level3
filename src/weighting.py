@@ -1,5 +1,5 @@
 """
-HBM 테마 커스텀 인덱스 — 2.3 편입 비중 산정 · 캡(IIF) 계산  (담당: 노민수)
+HBM 테마 커스텀 인덱스 - 2.3 편입 비중 산정 · 캡(IIF) 계산  (담당: 노민수)
 
 역할: `selection.py`가 확정한 편입 종목(규칙 통과자 전원, 수는 가변)을 받아
       **앵커 40% / 비앵커 60%**를 유동시가총액에
@@ -10,7 +10,7 @@ HBM 테마 커스텀 인덱스 — 2.3 편입 비중 산정 · 캡(IIF) 계산  
     universe.py  →  selection.py  →  **weighting.py**  →  index_calc.py
     (임효빈)         (노민수)          (노민수)             (김인서)
 
-⭐ 산출물은 '편입비중(%)'이 아니라 **IIF(i)**다.
+* 산출물은 '편입비중(%)'이 아니라 **IIF(i)**다.
    팀 README 지수 산식:  M(t) = Σ IIF(i) × FF(i) × S(i,t) × P(i,t)
    비중은 리밸런싱 시점의 스냅샷이라 매일 주가가 움직이면 어긋난다. 반면 IIF는
    캡을 반영한 **고정 계수**이므로 divisor 방식과 정합한다. 편입비중은 검증용으로 함께 낸다.
@@ -35,7 +35,7 @@ HBM 테마 커스텀 인덱스 — 2.3 편입 비중 산정 · 캡(IIF) 계산  
 IIF는 **정기변경 시점에 한 번 확정되는 고정 계수**다. 매일 바뀌는 것은 P(i,t)뿐이며,
 IIF는 다음 정기변경까지 그대로 쓴다. (편입비중은 확정 시점 스냅샷이므로 지수 산출에 쓰지 말 것)
 
-🟨 = 팀 공식본에 정의가 없어 확정한 항목 (근거는 `내파트_2장_확정규칙.md`).
+[TEAM] = 팀 공식본에 정의가 없어 확정한 항목 (근거는 `내파트_2장_확정규칙.md`).
 """
 from __future__ import annotations
 
@@ -53,10 +53,10 @@ __all__ = ["compute_weights", "verify", "allocate", "to_iif",
 # ----- 규칙 파라미터 --------------------------------------------------------- #
 ANCHOR_W = 0.40         # 앵커군 합계 비중(고정)
 NON_ANCHOR_W = 1.0 - ANCHOR_W   # 비앵커 버킷 = 0.60
-ANCHOR_CAP = 0.25       # 앵커 개별 상한 — 지수 전체 기준(공식본 명시)
-SAT_TOTAL_CAP = 0.18    # 위성군 합계 상한 — 지수 전체 기준(공식본 "잔여 60%의 30%")
+ANCHOR_CAP = 0.25       # 앵커 개별 상한 - 지수 전체 기준(공식본 명시)
+SAT_TOTAL_CAP = 0.18    # 위성군 합계 상한 - 지수 전체 기준(공식본 "잔여 60%의 30%")
 
-# 🟨 개별 실링의 **기준(분모)**은 공식본에 없다. 비앵커 버킷(60%) 대비로 확정.
+# [TEAM] 개별 실링의 **기준(분모)**은 공식본에 없다. 비앵커 버킷(60%) 대비로 확정.
 #    근거: 지수 전체 기준으로 읽으면 위성군은 개별 상한 25% > 합계 상한 18%가 되어
 #          어떤 데이터로도 발동할 수 없는 사문(死文)이 된다.
 #          버킷 기준이면 25% × 60% = 지수 15% < 18%이므로 정상 작동한다.
@@ -64,7 +64,7 @@ CORE_CAP_BUCKET = 0.30  # 핵심군 개별 상한(버킷 대비) → 지수 18%p
 SAT_CAP_BUCKET = 0.25   # 위성군 개별 상한(버킷 대비) → 지수 15%p
 
 # 대조용 대안 해석(지수 전체 기준). 기본값은 위의 bucket 기준이며, 이 값들은
-# `cap_basis="index"`로 호출할 때만 쓰인다 — 두 해석의 결과 차이를 보여줄 때 사용.
+# `cap_basis="index"`로 호출할 때만 쓰인다 - 두 해석의 결과 차이를 보여줄 때 사용.
 CORE_CAP_INDEX = 0.30
 SAT_CAP_INDEX = 0.25
 
@@ -73,13 +73,13 @@ _TOL = 1e-12
 
 
 # --------------------------------------------------------------------------- #
-# 상한 적용 — 그룹 합계를 유지한 채 개별 상한까지 재배분
+# 상한 적용 - 그룹 합계를 유지한 채 개별 상한까지 재배분
 # --------------------------------------------------------------------------- #
 def _cap_within(w: np.ndarray, mask: np.ndarray, cap: float):
     """mask 그룹 안에서 개별 상한(cap)을 반복 적용.
 
     초과분은 아직 상한에 닿지 않은 같은 그룹 종목에 **현재 비중(=유동시총) 비례**로 넘긴다.
-    그룹 안에서 다 수용하지 못하면 **남은 초과분을 반환**한다 — 조용히 버리면
+    그룹 안에서 다 수용하지 못하면 **남은 초과분을 반환**한다 - 조용히 버리면
     합계가 100%에서 모자라게 되므로, 호출부의 재배분 폭포가 이어받는다.
     반환: (조정된 w, 그룹 내 수용 불가 초과분)
     """
@@ -122,10 +122,10 @@ def allocate(groups: np.ndarray, fmc: np.ndarray,
 
     # 퇴화 상황 방어(정원 폐지로 군이 빌 수 있음): 조용히 넘기지 않는다.
     if not A.any():
-        raise ValueError("앵커군(HBM 양산 제조사)이 없습니다 — 지수 구성 요건 미달. "
+        raise ValueError("앵커군(HBM 양산 제조사)이 없습니다 - 지수 구성 요건 미달. "
                          "테마의 양산 주체가 없으면 지수가 성립하지 않습니다.")
     if not N.any():
-        raise ValueError("비앵커(핵심·위성) 편입 종목이 없어 60%를 배분할 수 없습니다 — "
+        raise ValueError("비앵커(핵심·위성) 편입 종목이 없어 60%를 배분할 수 없습니다 - "
                          "지수 구성 요건 미달. 정기변경에서 재검토가 필요합니다.")
 
     w[A] = ANCHOR_W * fmc[A] / fmc[A].sum()              # ④
@@ -137,7 +137,7 @@ def allocate(groups: np.ndarray, fmc: np.ndarray,
     elif cap_basis == "index":
         core_cap, sat_cap = CORE_CAP_INDEX, SAT_CAP_INDEX
     else:
-        raise ValueError(f"cap_basis는 'bucket' 또는 'index' — 받은 값: {cap_basis!r}")
+        raise ValueError(f"cap_basis는 'bucket' 또는 'index' - 받은 값: {cap_basis!r}")
 
     for i in range(MAX_ITER):                            # ⑥~⑧
         before = w.copy()
@@ -148,13 +148,13 @@ def allocate(groups: np.ndarray, fmc: np.ndarray,
                 w[C] += excess * fmc[C] / fmc[C].sum()
             else:
                 w[A] += excess * fmc[A] / fmc[A].sum()
-                logger.warning("핵심군 부재 — 위성 초과분 %.2f%%p 를 앵커군이 흡수", excess * 100)
+                logger.warning("핵심군 부재 - 위성 초과분 %.2f%%p 를 앵커군이 흡수", excess * 100)
         w, ex_c = _cap_within(w, C, core_cap)
         w, ex_s = _cap_within(w, S, sat_cap)
 
         # 재배분 폭포: 같은 군 → 다른 비앵커 군(여유 한도 내) → 앵커군.
         # 자격 종목이 소수면(예: 핵심 1개) 군 내 수용이 불가능한데, 초과분을
-        # 조용히 버리면 합계가 100%에서 모자란다 — 반드시 어딘가가 흡수해야 한다.
+        # 조용히 버리면 합계가 100%에서 모자란다 - 반드시 어딘가가 흡수해야 한다.
         pool = ex_c + ex_s
         if pool > _TOL:
             if C.any():
@@ -172,26 +172,26 @@ def allocate(groups: np.ndarray, fmc: np.ndarray,
                     pool -= give
             if pool > _TOL:
                 # 희소 조항: 비앵커의 상한 수용량이 60%에 미달 → 잔여는 앵커군이
-                # 흡수한다(합계 100% 최우선 — 이 경우 앵커 40%·개별 25% 초과 허용).
+                # 흡수한다(합계 100% 최우선 - 이 경우 앵커 40%·개별 25% 초과 허용).
                 w[A] += pool * fmc[A] / fmc[A].sum()
-                logger.warning("희소 조항 발동 — 비앵커 상한 수용량 부족, "
+                logger.warning("희소 조항 발동 - 비앵커 상한 수용량 부족, "
                                "%.2f%%p 를 앵커군이 흡수", pool * 100)
         if np.abs(w - before).max() < _TOL:
             logger.debug("상한 수렴: %d회", i + 1)
             break
     else:
-        logger.warning("상한이 %d회 내에 수렴하지 않음 — 입력을 확인하세요", MAX_ITER)
+        logger.warning("상한이 %d회 내에 수렴하지 않음 - 입력을 확인하세요", MAX_ITER)
 
     # 최종 안전핀: 어떤 경로로든 합계가 1.0에 못 미치면 앵커가 흡수(합계 100% 최우선)
     resid = 1.0 - float(w.sum())
     if resid > 1e-9:
         w[A] += resid * fmc[A] / fmc[A].sum()
-        logger.warning("합계 보정 — 잔여 %.4f%%p 를 앵커군이 흡수(희소 조항)", resid * 100)
+        logger.warning("합계 보정 - 잔여 %.4f%%p 를 앵커군이 흡수(희소 조항)", resid * 100)
     return w
 
 
 # --------------------------------------------------------------------------- #
-# IIF — 김인서 index_calc.py 로 넘기는 산출물
+# IIF - 김인서 index_calc.py 로 넘기는 산출물
 # --------------------------------------------------------------------------- #
 def to_iif(w: np.ndarray, fmc: np.ndarray) -> np.ndarray:
     """목표 비중 w를 지수 산식의 캡 조정계수 IIF로 환산.
@@ -204,7 +204,7 @@ def to_iif(w: np.ndarray, fmc: np.ndarray) -> np.ndarray:
     기준시가총액 B(t)가 흡수한다). 따라서 **최댓값이 1.0이 되도록 정규화**해
     IIF를 (0, 1] 구간의 캡 계수로 해석 가능하게 만든다.
 
-    읽는 법 — 상한이 하나도 발동하지 않으면 **IIF는 군마다 한 값**으로 나온다.
+    읽는 법 - 상한이 하나도 발동하지 않으면 **IIF는 군마다 한 값**으로 나온다.
     비앵커는 w = 0.60 × 유동시총/Σ유동시총 이므로 w/유동시총이 전 종목 동일하기 때문이며,
     버그가 아니다. 예시 데이터 기준 비앵커 1.0 / 앵커 0.0213 → **"삼성·SK하이닉스는
     유동시총의 2.1%만 지수에 반영한다"**는 뜻이고, 이것이 앵커 40% 제약의 실체다.
@@ -214,7 +214,7 @@ def to_iif(w: np.ndarray, fmc: np.ndarray) -> np.ndarray:
         raw = np.where(fmc > 0, w / fmc, 0.0)
     peak = raw.max()
     if peak <= 0:
-        raise ValueError("IIF 산출 실패 — 유동시총이 모두 0이거나 비중이 산출되지 않았습니다")
+        raise ValueError("IIF 산출 실패 - 유동시총이 모두 0이거나 비중이 산출되지 않았습니다")
     return raw / peak
 
 
@@ -263,6 +263,12 @@ def verify(d: pd.DataFrame, cap_basis: str = "bucket", tol: float = 1e-6) -> lis
     capacity = core_cap * nC + min(SAT_TOTAL_CAP, sat_cap * nS)
     scarce = capacity < NON_ANCHOR_W - tol
 
+    # 앵커 강제 초과: 앵커 종목 수가 적어 40% 합계와 25% 개별 상한을 동시에 만족할
+    # 수 없는 경우(예: 앵커 1종목이면 40% > 25%). allocate 는 합계 100%를 우선해
+    # 그 한 종목에 40%를 배정하므로, 이 경우 개별 상한 위반으로 잡으면 오탐이다.
+    nA = int((g == "앵커").sum())
+    anchor_forced = nA > 0 and ANCHOR_W / nA > ANCHOR_CAP + tol
+
     issues = []
     if abs(w.sum() - 1.0) > tol:
         issues.append(f"비중 합계 {w.sum()*100:.4f}% ≠ 100%")
@@ -281,14 +287,15 @@ def verify(d: pd.DataFrame, cap_basis: str = "bucket", tol: float = 1e-6) -> lis
         m = g == grp
         if not m.any():
             continue
-        # 희소·퇴화 조항: 앵커가 잔여를 흡수하는 상황에서는 합계 100% 유지가
-        # 앵커 개별 상한(25%)에 우선한다(예: 2종목×25%=50%로는 100%를 못 채움).
-        if grp == "앵커" and scarce:
+        # 희소·퇴화 조항: 앵커가 잔여를 흡수하거나(scarce) 앵커 수가 적어 40%를
+        # 개별 25% 안에서 못 담는(anchor_forced) 상황에서는 합계 100% 유지가 앵커
+        # 개별 상한(25%)에 우선한다(예: 앵커 1종목 40%, 2종목×25%=50%로 100% 미달).
+        if grp == "앵커" and (scarce or anchor_forced):
             continue
         if w[m].max() > cap + tol:
             issues.append(f"{grp} 개별 최대 {w[m].max()*100:.4f}% > 상한 {cap*100:.2f}%")
 
-    # IIF 정합성 — IIF × 유동시총으로 되돌린 비중이 목표 비중과 일치해야 한다.
+    # IIF 정합성 - IIF × 유동시총으로 되돌린 비중이 목표 비중과 일치해야 한다.
     if "IIF" in d.columns:
         fmc = pd.to_numeric(d["유동시총"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
         m = d["IIF"].to_numpy(dtype=float) * fmc

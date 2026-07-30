@@ -1,0 +1,3 @@
+ticker,name,disclosed_at,fiscal_year,sector,hbm_massproduction,hbm_exposure,mem_ratio,process_confirmed,committee_ok,free_float,source,audit_opinion,admin_issue,reviewer,judgment_status
+000001,예시핵심,2026-03-20,2025,반도체장비,FALSE,0.35,,TRUE,FALSE,0.60,DART 접수 URL TODO,적정,FALSE,,DRAFT
+000002,예시위성,2026-03-21,2025,반도체소재,FALSE,,0.75,TRUE,FALSE,0.55,DART 접수 URL TODO,적정,FALSE,,DRAFT

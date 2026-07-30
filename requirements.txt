@@ -1,0 +1,15 @@
+# 최소 지원 버전. 정확한 수치 재현 릴리스에서는 Python·라이브러리 버전을
+# 별도 실행 기록에 고정한다(>= 표기는 잠금 파일이 아니다).
+pandas>=2.0
+numpy>=1.24
+pykrx>=1.0.45          # 시세·시가총액 수집 (run_backtest / build_pit_snapshots)
+pyyaml>=6.0           # 벤치마크 지정 파일(data/benchmark.yaml) 파싱 - .json 사용 시 불필요
+pytest>=7.0            # tests (tests/run_all.py 는 pytest 없이도 동작)
+
+# 대시보드 (streamlit run app.py)
+streamlit>=1.30
+altair>=5.0
+
+# 판정 근거 수집(hbm_evidence.py)에만 필요 — 백테스트·대시보드에는 불필요
+opendartreader>=0.2.2
+python-dotenv>=1.0

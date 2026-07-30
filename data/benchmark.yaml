@@ -1,0 +1,43 @@
+# HBM 테마지수 벤치마크 지정 준비본 v2 (2026-07-28)
+#
+# 운영 결정:
+#   - 헤드라인 추종오차·상관계수는 KRX 반도체 PR을 사용한다.
+#   - TR은 별도 보조 비교이며 실제 조회된 공통 관측기간에만 산출한다.
+#   - KRX 반도체 TR의 산출 개시일(2024-12-09)과 과거 시계열 최초
+#     관측일은 같은 개념이 아니다. resolver 출력으로 최초 관측일을 확인한다.
+#
+# CONFIRMED 전환 절차:
+#   1) python analysis\resolve_benchmark_code.py
+#   2) 아래 PR/TR 코드·정확한 표기명과 최초 관측일을 회의록에 기록
+#   3) effective_date·resolved_by 기입, 재배포 권한 확인 후 status 변경
+
+status: PROVISIONAL
+headline_return_type: PR
+effective_date: ""
+resolved_by: ""
+
+fallback_keyword: 반도체
+
+primary:
+  pr_name: "KRX 반도체"
+  tr_name: "KRX 반도체 TR"
+  pr_code: ""
+  tr_code: ""
+  source: KRX
+  rationale: "국내 반도체 섹터 대비 HBM 선별 효과를 분리하는 지역·섹터 정합 벤치마크"
+
+# 아래 항목은 비교·설명용 메타데이터다. 현재 run_backtest.py의 공식
+# 추종오차 입력은 primary만 소비한다.
+secondary:
+  - name: "코스피 200"
+    pr_code: ""
+    tr_code: ""
+    rationale: "광의 국내시장 대비 위험 프리미엄"
+  - name: "동일 33종목 동일가중"
+    pr_code: ""
+    tr_code: ""
+    rationale: "내부 산출 비교군으로 가중 규칙의 기여를 분리"
+
+reference_only:
+  - name: "iSelect 글로벌 HBM반도체 지수"
+    rationale: "동일 테마 상용지수이나 지역·유니버스가 달라 공식 추종오차 기준에서는 제외"

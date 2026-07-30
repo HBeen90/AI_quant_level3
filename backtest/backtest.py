@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-backtest/backtest.py — HBM 밸류체인 지수: 이벤트 소비형 백테스트 엔진
+backtest/backtest.py - HBM 밸류체인 지수: 이벤트 소비형 백테스트 엔진
 ====================================================================
 파이프라인(팀 합의): rebalance.py -> 이벤트 목록 -> backtest.py
   * rebalance.py  : 규칙 계층. 가격을 모르며 event만 생산.
@@ -9,7 +9,7 @@ backtest/backtest.py — HBM 밸류체인 지수: 이벤트 소비형 백테스�
     캡 이벤트가 '모두' 이벤트 목록에 포함될 때만 성립하며, 그 포함을
     build_event_schedule()이 담당한다.
 
-가격 데이터 계약 (PR/TR — 제6조)
+가격 데이터 계약 (PR/TR - 제6조)
 --------------------------------
 prices : 배당 미반영 수정주가여야 한다(무상증자·액면분할 등 주식수 이벤트만
   반영, 현금배당 미반영). 공급처의 "수정주가"가 배당 재투자까지 반영한
@@ -37,8 +37,12 @@ from src.rebalance import (  # noqa: E402
 
 
 def make_event(date, reason: str, weights: pd.Series) -> dict:
-    """이벤트 인터페이스(팀 합의 규격) — v1과 동일."""
+    """이벤트 인터페이스(팀 합의 규격) - v1과 동일."""
     w = weights.astype(float)
+    if w.empty or w.index.has_duplicates:
+        raise ValueError("이벤트 목표비중은 비어 있지 않고 티커가 고유해야 합니다")
+    if not np.isfinite(w).all() or (w < 0).any() or float(w.sum()) <= 0:
+        raise ValueError("이벤트 목표비중은 유한한 비음수이며 합계가 양수여야 합니다")
     return {"effective_date": pd.Timestamp(date), "reason": reason,
             "target_weights": w / w.sum()}
 
@@ -78,7 +82,7 @@ def apply_suspensions(prices: pd.DataFrame,
 
 
 # ----------------------------------------------------------------------
-# 1) 이벤트 스케줄 생성 — v8 전체 방법론(정기 + 월간 캡 + 수시변경) 연결
+# 1) 이벤트 스케줄 생성 - v8 전체 방법론(정기 + 월간 캡 + 수시변경) 연결
 # ----------------------------------------------------------------------
 def build_event_schedule(prices: pd.DataFrame,
                          review_snapshots: dict,
@@ -118,10 +122,39 @@ def build_event_schedule(prices: pd.DataFrame,
     reg_dates = sorted(snaps)
     hist: list = []
 
+    # fail-closed: 정기변경 시행일이 실제 거래일 달력(prices.index)에 있어야 한다.
+    # 루프는 거래일만 순회하며 `d in snaps` 로 정기변경을 트리거하므로, 시행일이
+    # 휴장일이면 그 정기변경이 **조용히 누락**된다(에러도 없이 구간 전체가 직전
+    # 구성으로 이어짐). build_pit_snapshots 는 bdate_range(주말만 제외)로 시행일을
+    # 잡는데 run_backtest 는 pykrx 실거래일을 쓰므로, 대체공휴일 등에서 어긋날 수
+    # 있다. 조용한 누락 대신 어긋난 날짜를 지목해 멈춘다.
+    if not reg_dates:
+        raise ValueError("정기변경 스냅샷이 최소 1건 필요합니다")
+    off_cal = [d for d in reg_dates if d not in prices.index]
+    if off_cal:
+        raise ValueError(
+            "정기변경 시행일이 거래일 달력에 없습니다(휴장일 등): "
+            f"{[str(d.date()) for d in off_cal]} - 스냅샷 시행일을 실제 거래일로 "
+            "맞추십시오. 그대로 두면 해당 정기변경이 조용히 누락됩니다 "
+            "(build_pit_snapshots 의 bdate_range 와 실거래일 달력 불일치).")
+    off_adhoc = sorted(d for d in adhoc if d not in prices.index)
+    off_emrg = sorted(d for d in emrg if d not in prices.index)
+    if off_adhoc or off_emrg:
+        details = []
+        if off_adhoc:
+            details.append(f"수시편출 공지일 {[str(d.date()) for d in off_adhoc]}")
+        if off_emrg:
+            details.append(f"긴급심사 공표일 {[str(d.date()) for d in off_emrg]}")
+        raise ValueError(
+            "이벤트 기준일이 거래일 달력에 없습니다: " + " · ".join(details)
+            + " - D+2 기산 거래일을 명시해 입력하십시오.")
+
     rets = prices.pct_change(fill_method=None)
     dates = prices.index[prices.index >= reg_dates[0]]
-    is_month_end = pd.Series(dates, index=dates).groupby(
-        [dates.year, dates.month]).transform("max") == pd.Series(dates, index=dates)
+    # 다음 실제 거래일이 다음 달에 있어야 월말로 확정한다. 패널이 월중에
+    # 끝났을 때 마지막 관측일을 월말로 오인해 캡을 조기 점검하지 않는다.
+    next_dates = pd.Series(dates, index=dates).shift(-1)
+    is_month_end = next_dates.notna() & (next_dates.dt.month != dates.month)
 
     events: list = []
     vm = None
@@ -147,17 +180,35 @@ def build_event_schedule(prices: pd.DataFrame,
             hist.append({"date": d, "event": "under_min_resolved",
                          "n": len(vm.weights)})
 
+    def mark_deferred(d, kind: str, **details) -> None:
+        row = {"date": d, "event": "deferred_beyond_panel", "kind": kind,
+               "lag_trading_days": 2, "panel_end": dates[-1]}
+        row.update(details)
+        hist.append(row)
+
     def recheck_and_book_cap(i: int) -> None:
         pending_caps.clear()
         if vm is None:
             return
         adj, changed = monitor(vm.weights, cfg)
-        if changed and i + 2 < len(dates):
-            pending_caps[dates[i + 2]] = adj
+        if changed:
+            if i + 2 < len(dates):
+                pending_caps[dates[i + 2]] = adj
+            else:
+                mark_deferred(dates[i], "cap")
 
     for i, d in enumerate(dates):
         if vm is not None:
             vm.drift(rets.loc[d])
+
+        # 공지는 정기변경 여부와 무관하게 먼저 D+2 예약한다. 정기변경일 공지나
+        # 정기변경을 가로지르는 예약도 하드 편출 효력을 잃으면 안 된다.
+        if d in adhoc:
+            if i + 2 < len(dates):
+                pending_excl.setdefault(dates[i + 2], []).extend(adhoc[d])
+            else:
+                mark_deferred(d, "exclusion",
+                              tickers=sorted(t for t, _ in adhoc[d]))
 
         if d in snaps:                                  # 정기변경 (지연 계산)
             # [리뷰 P1-1] prev_members는 사전 계산된 직전 정기변경 결과가 아니라
@@ -183,14 +234,10 @@ def build_event_schedule(prices: pd.DataFrame,
                                 res["members"].set_index("ticker")["group"].copy(),
                                 cfg)
             events.append(make_event(d, "regular", vm.weights))
-            pending_excl.clear()
             pending_emrg.clear()
             recheck_and_book_cap(i)
             track_breach(i, d)
             continue
-
-        if d in adhoc and i + 2 < len(dates):           # 편출 공지 -> D+2 예약
-            pending_excl.setdefault(dates[i + 2], []).extend(adhoc[d])
 
         if vm is not None and d in pending_excl:        # 편출 집행 (무대체)
             batch = [(t, r) for t, r in pending_excl.pop(d)
@@ -246,8 +293,11 @@ def build_event_schedule(prices: pd.DataFrame,
                     g_new = combined.set_index("ticker")["group"]
                     if i + 2 < len(dates):              # 공표일 A 기준 A+2 편입
                         pending_emrg[dates[i + 2]] = (w_new, g_new)
-                    hist.append({"date": d, "event": "emergency_fill_booked",
-                                 "adds": sorted(adds["ticker"])})
+                        hist.append({"date": d, "event": "emergency_fill_booked",
+                                     "adds": sorted(adds["ticker"])})
+                    else:
+                        mark_deferred(d, "emergency_fill",
+                                      adds=sorted(adds["ticker"]))
 
         if vm is not None and d in pending_caps:        # 월간 캡 집행
             tgt = pending_caps.pop(d)
@@ -281,6 +331,15 @@ def simulate_index(prices: pd.DataFrame, events: list | dict,
     prices = apply_suspensions(prices, suspensions)   # 안건 1 (미등록 결측은 불변)
     if isinstance(events, dict):
         events = [make_event(k, "regular", v) for k, v in events.items()]
+    if not events:
+        raise ValueError("지수 재생에는 이벤트가 최소 1건 필요합니다")
+    if not prices.index.is_monotonic_increasing or prices.index.has_duplicates:
+        raise ValueError("가격 인덱스는 날짜 오름차순·중복 없음이어야 합니다")
+    missing_event_dates = sorted(
+        {pd.Timestamp(e["effective_date"]) for e in events} - set(prices.index))
+    if missing_event_dates:
+        raise ValueError("가격 인덱스에 없는 이벤트 시행일: "
+                         f"{[d.date() for d in missing_event_dates]}")
     ev: dict = {}
     for e in sorted(events, key=lambda x: x["effective_date"]):
         ev.setdefault(e["effective_date"], []).append(e)
@@ -290,10 +349,27 @@ def simulate_index(prices: pd.DataFrame, events: list | dict,
     if mode == "gross_tr":
         if ordinary_dividends is None:
             raise ValueError("mode='gross_tr'에는 ordinary_dividends가 필요합니다"
-                             "(제6조). 보통배당(주당, 락일 기준)만 넣을 것 — "
+                             "(제6조). 보통배당(주당, 락일 기준)만 넣을 것 - "
                              "특별배당·자본환급은 PR 제수 조정으로 반영되므로 "
                              "포함 시 이중반영이 된다.")
-        dy = ordinary_dividends.reindex_like(prices).fillna(0.0) / prices.shift(1)
+        divs = ordinary_dividends.apply(pd.to_numeric, errors="coerce")
+        bad_numeric = ordinary_dividends.notna() & divs.isna()
+        if bad_numeric.any().any():
+            raise ValueError("ordinary_dividends에 숫자가 아닌 값이 있습니다")
+        if (divs.fillna(0.0) < 0).any().any():
+            raise ValueError("ordinary_dividends는 음수일 수 없습니다")
+        extra_cols = divs.columns.difference(prices.columns)
+        extra_dates = divs.index.difference(prices.index)
+        if (len(extra_cols) and divs[extra_cols].fillna(0.0).ne(0).any().any()) \
+                or (len(extra_dates) and divs.loc[extra_dates].fillna(0.0).ne(0).any().any()):
+            raise ValueError("가격 패널 밖 종목/날짜에 배당이 있습니다")
+        divs = divs.reindex_like(prices).fillna(0.0)
+        prev_prices = prices.shift(1)
+        bad_prev = (divs > 0) & (prev_prices.isna() | (prev_prices <= 0))
+        if bad_prev.any().any():
+            where = list(zip(*np.where(bad_prev.to_numpy())))[:5]
+            raise ValueError(f"배당락일 직전 가격 결측·비양수: {where}")
+        dy = divs / prev_prices
         rets = rets + dy.fillna(0.0)                            # 락일 세전 재투자
     elif ordinary_dividends is not None:
         raise ValueError("mode='pr'에서는 ordinary_dividends를 넣지 마십시오 - "
@@ -376,7 +452,7 @@ def max_drawdown(level: pd.Series) -> dict:
 
 
 def annualized_turnover(bt: pd.DataFrame) -> float:
-    """연율화 편도 회전율 = 총 회전율 / 실제 경과연수 — 공식 수치는 이것이다.
+    """연율화 편도 회전율 = 총 회전율 / 실제 경과연수 - 공식 수치는 이것이다.
     달력연도별 합계(annual_turnover)를 단순 평균하면 부분 연도(예: 6월~익년
     6월)가 두 조각으로 갈라져 절반으로 과소계상되므로 요약치로 쓰지 않는다."""
     yrs = (bt.index[-1] - bt.index[0]).days / 365.25
@@ -384,7 +460,7 @@ def annualized_turnover(bt: pd.DataFrame) -> float:
 
 
 def annual_turnover(bt: pd.DataFrame) -> pd.Series:
-    """달력연도별 편도 회전율 합 — 연도 추이 확인용 보조 표. 요약·비교에는
+    """달력연도별 편도 회전율 합 - 연도 추이 확인용 보조 표. 요약·비교에는
     annualized_turnover를 사용할 것(부분 연도 과소계상 방지)."""
     return bt["turnover"].groupby(bt.index.year).sum()
 
@@ -400,9 +476,12 @@ def turnover_by_reason(bt: pd.DataFrame) -> pd.Series:
 
 
 def correlation(level: pd.Series, benchmark: pd.Series, min_obs: int = 30) -> float:
-    a, b = level.pct_change().dropna(), benchmark.pct_change().dropna()
-    idx = a.index.intersection(b.index)
-    return float(np.corrcoef(a[idx], b[idx])[0, 1]) if len(idx) >= min_obs else np.nan
+    pair = pd.concat(
+        [level.pct_change(fill_method=None).rename("index"),
+         benchmark.pct_change(fill_method=None).rename("benchmark")],
+        axis=1, join="inner").dropna()
+    return float(pair["index"].corr(pair["benchmark"])) \
+        if len(pair) >= min_obs else np.nan
 
 
 def _aligned_benchmark_returns(level: pd.Series, benchmark: pd.Series,

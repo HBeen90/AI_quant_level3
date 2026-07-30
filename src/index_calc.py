@@ -151,13 +151,13 @@ def adjust_divisor_for_dividend(B_t: float, M_ex: float,
     시가총액으로 둔 표기다. M_pre = M_ex + D 를 대입하면 위 식과 같다.
     엔진은 배당락일 종가만 갖고 있으므로 M_ex 기준을 채택한다.
     """
-    denom = M_ex + dividend_M
-    if denom <= 0:
-        raise ValueError(f"배당 보정 분모 비양수: M_ex={M_ex}, D={dividend_M}")
     if dividend_M < 0:
         raise ValueError("dividend_M 은 양수여야 한다(배당 총액). "
                          "자본환급·특별배당은 3.4 제수 조정 경로로 처리할 것 - "
                          "여기에 넣으면 이중반영이 된다.")
+    denom = M_ex + dividend_M
+    if denom <= 0:
+        raise ValueError(f"배당 보정 분모 비양수: M_ex={M_ex}, D={dividend_M}")
     return B_t * M_ex / denom
 
 
@@ -280,8 +280,14 @@ def build_index_series(price_panel: pd.DataFrame,
         · exclusion    : {"tickers": [코드, ...]}
                          ΔM 을 엔진이 계산한다(편출 종목의 당일 기여분, 음수).
                          대체 편입은 하지 않는다 - 무대체 원칙.
-        · share_change : {"delta_M": float}
+        · share_change : {"ticker": 코드, "delta_M": float}
                          유상증자·주식교부 합병 등. 호출자가 ΔM 을 준다.
+                         제수(B)만 조정하고 해당 종목의 유동시총 기준을 그대로
+                         두면, 다음날부터 M(t) 계산이 옛 크기로 되돌아가서
+                         "가격 변화 없이 지수가 영구적으로 어긋나는" 왜곡이
+                         생긴다. 그래서 ticker의 ff·기준가(p0)도 오늘 시점
+                         기준으로 함께 재설정한다 - 그래야 내일부터 그 종목의
+                         기여분이 새 크기 기준으로 계속 이어진다.
         · dividend     : {"dps": pd.Series}  ← TR 계열 전용
                          배당락일 주당 배당금. 엔진이 M 단위로 환산해
                          adjust_divisor_for_dividend 로 제수를 보정한다.
@@ -303,6 +309,16 @@ def build_index_series(price_panel: pd.DataFrame,
     start = pd.Timestamp(recon[0]["date"])
     dates = price_panel.index[price_panel.index >= start]
     recon_by_date = {pd.Timestamp(e["date"]): e for e in recon}
+
+    # 이벤트 날짜가 price_panel의 실제 거래일과 하나라도 안 맞으면(공휴일·주말
+    # 착오, 날짜 포맷 실수 등) 그 이벤트는 for d in dates 루프에서 영영 안
+    # 걸리고 조용히 무시된다 - members가 끝까지 비어서 level=1000, n_members=0
+    # 껍데기 결과가 에러 없이 나올 수 있다. 미리 막는다.
+    all_event_dates = list(recon_by_date) + list(adhoc)
+    missing = sorted({d.date() for d in all_event_dates if d not in price_panel.index})
+    if missing:
+        raise ValueError(f"이벤트 날짜가 price_panel 거래일에 없습니다(공휴일/주말 "
+                         f"착오 등 확인): {missing}")
 
     rows: list = []
     level = BASE_INDEX_LEVEL
@@ -358,7 +374,24 @@ def build_index_series(price_panel: pd.DataFrame,
                 members = [t for t in members if t not in gone]
                 tag = (tag + "+exclusion").strip("+")
             elif e["kind"] == "share_change":
-                B = adjust_base_market_cap(B, M, float(e["delta_M"]))
+                ticker = e["ticker"]
+                if ticker not in members:
+                    raise ValueError(f"{d.date()} share_change 대상 종목"
+                                     f"({ticker})이 현재 구성에 없습니다")
+                delta_M = float(e["delta_M"])
+                old_contrib = float(iif[ticker] * ff[ticker]
+                                    * px_now[ticker] / p0[ticker])
+                new_contrib = old_contrib + delta_M
+                if new_contrib <= 0:
+                    raise ValueError(f"{d.date()} share_change 결과 {ticker} "
+                                     f"기여분이 비양수({new_contrib})")
+                B = adjust_base_market_cap(B, M, delta_M)
+                # 오늘을 새 기준일로 재설정 - 그래야 다음날부터 이 종목의
+                # 기여분이 new_contrib에서 가격 변화만큼만 움직인다.
+                ff = ff.copy()
+                p0 = p0.copy()
+                ff[ticker] = new_contrib / iif[ticker]
+                p0[ticker] = px_now[ticker]
                 tag = (tag + "+share_change").strip("+")
             elif e["kind"] == "dividend":                # TR 계열
                 raw_dps = e["dps"].reindex(members)

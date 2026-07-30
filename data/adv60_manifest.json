@@ -1,0 +1,8 @@
+{
+  "asof": "2026-07-23",
+  "종목수": 33,
+  "미상장_제외": [],
+  "정의": "get_market_cap(구간, 종목)['거래대금'].tail(60).mean()",
+  "원천": "pykrx get_market_cap · build_pit_snapshots.market_facts 재사용",
+  "주의": "사전 스크린(ADV60<10억 탈락)과 같은 정의·같은 함수. 다른 값이 나오면 둘 중 하나가 잘못된 것."
+}

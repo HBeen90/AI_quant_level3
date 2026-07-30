@@ -308,6 +308,57 @@ def c_survivorship_survey():
     )
 
 
+def c_capacity_measured():
+    """실측 ADV60 로 잰 정기변경 용량. 가정 ADV 시나리오와 구분되는 수치다.
+
+    무엇이 달라졌나
+    ---------------
+    기존 클레임(c_capacity_inverse)은 **가정 ADV**(15·45·500억) 시나리오로
+    "고정 % 상한은 ADV에 따라 소요일수가 수십 배 달라진다"는 구조를 보였다.
+    이건 산식의 성질이지 우리 지수의 수치가 아니다.
+    이 클레임은 2026-07-23 기준 **실측 ADV60** 으로 우리 지수의 실제
+    정기변경 |Δw| 를 소화하는 데 며칠 걸리는지를 잰다.
+
+    범위 제한(반드시 함께 말할 것)
+      · ADV60 은 2026-07-23 **1시점** 값이다. 시계열이 아니다.
+        (인용 금지 목록의 'ADV60 시계열' 항목은 그대로 유효하다)
+      · 수시편출·긴급심사·거래정지 이벤트는 capacity 입력에 아직 없다.
+        정기변경과 월간 캡만 반영된 값이다.
+    """
+    import warnings as _w
+    from analysis.capacity_v2 import real_capacity
+    import json as _json
+
+    adv_csv = os.path.join(HERE, "data", "adv60.csv")
+    man = _json.loads(open(os.path.join(HERE, "data", "adv60_manifest.json"),
+                           encoding="utf-8").read())
+    with _w.catch_warnings():
+        _w.simplefilter("ignore")           # 하한 미달 경고는 여기서 의미 없음
+        td = real_capacity(
+            os.path.join(HERE, "data", "snapshots"),
+            os.path.join(HERE, "out", "px.csv"),
+            adv_csv, aum_eok=3000.0, participation=0.10, policy="mid")
+    if td.empty:
+        return False, "용량 재생 결과가 비었습니다"
+    worst = td.sort_values("소요일수", ascending=False).iloc[0]
+    adv = pd.read_csv(adv_csv, dtype={"ticker": str})
+    ok = (
+        len(adv) > 0
+        and (pd.to_numeric(adv["adv60_krw"], errors="coerce") > 0).all()
+        and float(worst["소요일수"]) > 0
+        # 정의 단일화 확인 - 스크린과 같은 함수를 썼다는 기록이 남아 있어야 한다
+        and "market_facts" in str(man.get("원천", ""))
+        and str(man.get("asof", "")).strip() == "2026-07-23"
+    )
+    return ok, (
+        f"AUM 3,000억·참여율 10% 기준 최대 소요 {float(worst['소요일수']):.1f}거래일 "
+        f"({worst['ticker']} · |Δw| {float(worst['abs_delta_w']) * 100:.1f}% · "
+        f"ADV60 {float(worst['adv60_억']):.0f}억 · 함의상한 "
+        f"{float(worst['함의상한']) * 100:.2f}%) · ADV60 실측 {len(adv)}종목 "
+        f"({man.get('asof')} 1시점 - 시계열 아님 · 정기·캡만 반영)"
+    )
+
+
 def c_pr_tr_parallel():
     """PR/TR 병기 - 배당 기여도를 재계산하고 **가정을 문장에 붙여서** 낸다.
 
@@ -501,6 +552,8 @@ CLAIMS = [
     ("PR/TR 병기가 가능하며 배당 기여도는 재현된다(배당락일 근사 의존)",
      c_pr_tr_parallel, "out/backtest_tr/index_level_pr_tr.csv",
      "실측(가정 명시 · 보조 비교)"),
+    ("실측 ADV60 기준 정기변경 소화 일수가 리밸런싱 주기에 육박한다",
+     c_capacity_measured, "data/adv60.csv", "실측(ADV60 1시점 · 정기·캡)"),
     ("전 테스트 스위트가 통과한다",
      c_test_suite, "tests/run_all.py", "실측(실행)"),
 ]

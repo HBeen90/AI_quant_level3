@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>버퍼 정책 민감도 - 합성 시뮬레이션 (재검증)</title>
+<style>
+  body {
+    background:#0b0f14; color:#e6e9ef; font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;
+    margin:0; padding:32px 40px 56px;
+  }
+  h1 { font-size:20px; font-weight:600; margin:0 0 6px; }
+  .subtitle { color:#9aa4b2; font-size:13px; margin:0 0 24px; line-height:1.6; }
+  .badge-src { display:inline-block; background:#132534; color:#5fb8e0; border:1px solid #234a5e;
+    border-radius:5px; padding:2px 8px; font-size:11px; margin-left:6px; vertical-align:middle; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:18px; }
+  .card { background:#121821; border:1px solid #212a36; border-radius:10px; padding:16px 18px; position:relative; }
+  .card.default { border-color:#2f8fce; box-shadow:0 0 0 1px #2f8fce inset; }
+  .tag { position:absolute; top:12px; right:14px; font-size:10px; background:#2f8fce; color:#0b0f14;
+    font-weight:700; padding:2px 7px; border-radius:4px; letter-spacing:.03em; }
+  .card h2 { font-size:14px; margin:0 0 14px; font-weight:600; display:flex; align-items:center; gap:6px; }
+  .row { display:flex; justify-content:space-between; font-size:12.5px; padding:5px 0; color:#aab3c0; }
+  .row b { color:#e6e9ef; font-weight:600; }
+  .cap { margin-top:12px; padding-top:10px; border-top:1px solid #1e2530; font-size:11.5px; color:#8b96a5; line-height:1.55; }
+  .neutral { color:#9aa4b2; }
+  .good { color:#37c977; }
+  .warn { color:#e0965f; }
+  .note { margin-top:26px; background:#12181f; border:1px solid #263041; border-radius:8px; padding:14px 18px;
+    font-size:12.5px; color:#a9b3c2; line-height:1.7; }
+  .note b { color:#e6e9ef; }
+  .verify { margin-top:14px; font-size:11.5px; color:#5a6472; }
+  code { background:#182029; padding:1px 5px; border-radius:4px; color:#8fc7e8; }
+</style>
+</head>
+<body>
+
+<h1>버퍼 정책 민감도 - 합성 시뮬레이션 재검증판<span class="badge-src">sensitivity_v2.py 직접 실행 · seed 11개</span></h1>
+<p class="subtitle">
+  기존 패널의 수치가 현재 <code>analysis/sensitivity_v2.py</code> 코드로 재현되지 않아 전면 재계산했습니다.
+  seed 11개(20260722~20260732) 중앙값 기준이며, 편입·편출 건수를 분리 집계하도록 스크립트를 확장했습니다(기존 로직 변경 없음, 필드 추가만).
+  <b>합성 유니버스 기반 시나리오이므로 절대값이 아니라 정책 간 상대적 차이만 의미가 있습니다</b> - 실제 HBM 테마 백테스트(별도 패널)와는 다른 자료입니다.
+</p>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>None (버퍼 없음)</h2>
+    <div class="row"><span>유지 임계값</span><b>0.30 / 0.70</b></div>
+    <div class="row"><span>시뮬 회전율</span><b class="warn">37.7%</b></div>
+    <div class="row"><span>편입 / 편출 건수</span><b>43회 / 45회</b></div>
+    <div class="row"><span>CAGR (30bp)</span><b class="neutral">12.5%</b></div>
+    <div class="cap">신규 편입선(30%/70%)을 유지 기준에도 그대로 적용. 경계 종목의 잦은 재편입·재탈락으로 편입·편출 건수가 4개 정책 중 가장 많음(seed 범위 88건 고정).</div>
+  </div>
+
+  <div class="card">
+    <h2>Narrow (미세 버퍼)</h2>
+    <div class="row"><span>유지 임계값</span><b>0.29 / 0.69</b></div>
+    <div class="row"><span>시뮬 회전율</span><b class="warn">36.6%</b></div>
+    <div class="row"><span>편입 / 편출 건수</span><b>41회 / 43회</b></div>
+    <div class="row"><span>CAGR (30bp)</span><b class="neutral">12.8%</b></div>
+    <div class="cap">1%p 완화 버퍼. 경계 노이즈를 소폭 줄이지만 None 대비 회전율 감소가 3.0%에 그쳐 매매비용 완화 효과가 제한적.</div>
+  </div>
+
+  <div class="card default">
+    <div class="tag">DEFAULT (운영값)</div>
+    <h2>Mid (27/67 잠정 채택안)</h2>
+    <div class="row"><span>유지 임계값</span><b>0.27 / 0.67</b></div>
+    <div class="row"><span>시뮬 회전율</span><b class="good">26.8%</b></div>
+    <div class="row"><span>편입 / 편출 건수</span><b>23회 / 23회</b></div>
+    <div class="row"><span>CAGR (30bp)</span><b class="good">13.3%</b></div>
+    <div class="cap">sensitivity_v2.py 기반(seed 11개 중앙값), 3%p 완화 구간. None 대비 회전율 -28.8%(37.7%→26.8%), 편입+편출 건수 -47.7%(88→46)로 거의 절반 감소. 현행 운영값(27/67)과 일치.</div>
+  </div>
+
+  <div class="card">
+    <h2>Wide (광역 버퍼)</h2>
+    <div class="row"><span>유지 임계값</span><b>0.25 / 0.65</b></div>
+    <div class="row"><span>시뮬 회전율</span><b class="good">20.4%</b></div>
+    <div class="row"><span>편입 / 편출 건수</span><b>9회 / 7회</b></div>
+    <div class="row"><span>CAGR (30bp)</span><b class="neutral">13.2%</b></div>
+    <div class="cap">5%p 광역 버퍼. 회전율은 가장 낮지만 편출 조건이 느슨해 테마 이탈 종목의 편출이 지연될 수 있음 - 테마 순도 저하 우려와 회전율 절감을 함께 고려해야 함.</div>
+  </div>
+
+</div>
+
+<div class="note">
+  <b>기존 패널과의 차이</b> - 기존에 게시됐던 패널(회전율 48.5/38.2/24.6/18.2%, 편입·편출 32·29/28·24/21·15/18·12건, CAGR 20.3/20.9/21.6/21.3%)은
+  현재 코드의 seed 11개 어느 조합으로도, 평균·중앙값 어느 통계로도 재현되지 않았습니다. 방향성(None&gt;Narrow&gt;Mid&gt;Wide 순 회전율·편출입 감소)은 동일하지만
+  절대 수치는 상이한 파라미터(다른 유니버스 스펙·진폭·기간 또는 이전 단일 seed 버전)에서 나온 것으로 추정됩니다 - 원본 산출 근거를 특정하기 전까지 이전 패널은 발표에서 제외를 권고합니다.
+</div>
+
+<div class="verify">
+  검증: pytest 99/99 · tests/run_all.py 14/14(120건) 전체 통과 상태에서 seed 11개(20260722-20260732) 재실행, 결과는 <code>analysis/buffer_policy_sensitivity_v2.csv</code>(long-format)에 저장.
+</div>
+
+</body>
+</html>

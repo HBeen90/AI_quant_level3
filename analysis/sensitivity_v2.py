@@ -100,6 +100,8 @@ def run_policy(policy, spec, snaps_by_date, prices, review_dates):
         "정책": policy,
         "유지임계(핵심/위성)": f"{cfg.hold_core:.0%}/{cfg.hold_sat:.0%}",
         "연율화 회전율": annualized_turnover(bt),
+        "편입 횟수": adds,
+        "편출 횟수": drops,
         "편입+편출 횟수": adds + drops,
         "평균 종목 수": float(np.mean(ns)),
         "평균 노출도(비중가중)": float(np.mean(expos)),
@@ -107,6 +109,7 @@ def run_policy(policy, spec, snaps_by_date, prices, review_dates):
         "평균 최대비중": float(np.mean(top1s)),
         "총수익률(무비용)": float(bt["level"].iloc[-1] / bt["level"].iloc[0] - 1),
         "총수익률(30bp차감)": float(net.iloc[-1] / net.iloc[0] - 1),
+        "CAGR(30bp)": float(cagr(net)),
         "비용 드래그(연, bp)": (cagr(bt["level"]) - cagr(net)) * 1e4,
     }
 
@@ -143,8 +146,9 @@ def main(seeds=None, out_path=None):
         seeds = [DEFAULT_SEEDS[0] + k for k in range(args.seeds)]
         out_path = args.out
     long = pd.concat([run_seed(s) for s in seeds], ignore_index=True)
-    metrics = ["연율화 회전율", "편입+편출 횟수", "평균 종목 수",
-               "평균 노출도(비중가중)", "평균 HHI", "비용 드래그(연, bp)"]
+    metrics = ["연율화 회전율", "편입 횟수", "편출 횟수", "편입+편출 횟수",
+               "평균 종목 수", "평균 노출도(비중가중)", "평균 HHI",
+               "CAGR(30bp)", "비용 드래그(연, bp)"]
     med = long.groupby("정책")[metrics].median()
     lo = long.groupby("정책")[metrics].min()
     hi = long.groupby("정책")[metrics].max()

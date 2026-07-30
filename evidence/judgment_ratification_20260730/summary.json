@@ -1,0 +1,90 @@
+{
+ "generated_for": "docs/judgment_record_322310_atsemicon_20260730.md",
+ "documents": [
+  {
+   "code": "322310",
+   "name": "오로스테크놀로지",
+   "fy": "FY2024",
+   "rcp_no": "20250312000665",
+   "chars": 208418,
+   "hbm_mentions": 0,
+   "proc_mentions": 15,
+   "excerpt_file": "evidence/judgment_ratification_20260730/322310_20250312000665.txt",
+   "excerpt_sha256": "6ef88a6ba46f9a83b1e06320a37c736fb47109b14d5288de02b6e08944185a4e"
+  },
+  {
+   "code": "322310",
+   "name": "오로스테크놀로지",
+   "fy": "FY2025",
+   "rcp_no": "20260313000952",
+   "chars": 216609,
+   "hbm_mentions": 0,
+   "proc_mentions": 15,
+   "excerpt_file": "evidence/judgment_ratification_20260730/322310_20260313000952.txt",
+   "excerpt_sha256": "fecc2345ebcd416bee8475e68103516998f862615b6613a3811a030dff2acb7f"
+  },
+  {
+   "code": "089530",
+   "name": "에이티세미콘",
+   "fy": "FY2019",
+   "rcp_no": "20200330001176",
+   "chars": 244520,
+   "hbm_mentions": 0,
+   "proc_mentions": 43,
+   "excerpt_file": "evidence/judgment_ratification_20260730/089530_20200330001176.txt",
+   "excerpt_sha256": "3ec3a298fb2a9708099da8b1ed1a1a3b29722be433454fc7a09c4527e86df975"
+  },
+  {
+   "code": "089530",
+   "name": "에이티세미콘",
+   "fy": "FY2020",
+   "rcp_no": "20210323001042",
+   "chars": 306260,
+   "hbm_mentions": 0,
+   "proc_mentions": 46,
+   "excerpt_file": "evidence/judgment_ratification_20260730/089530_20210323001042.txt",
+   "excerpt_sha256": "90259368b7e2b5d8eddcd489b70ea748b6a562f6afcca825877aa461c5be8dbb"
+  },
+  {
+   "code": "089530",
+   "name": "에이티세미콘",
+   "fy": "FY2021",
+   "rcp_no": "20220323000014",
+   "chars": 356204,
+   "hbm_mentions": 0,
+   "proc_mentions": 57,
+   "excerpt_file": "evidence/judgment_ratification_20260730/089530_20220323000014.txt",
+   "excerpt_sha256": "5e718cead6b2948ec50a7c8b86f83388f0b8d795f734df3ac315905397fbaf3f"
+  },
+  {
+   "code": "089530",
+   "name": "에이티세미콘",
+   "fy": "FY2022",
+   "rcp_no": "20230323001515",
+   "chars": 345245,
+   "hbm_mentions": 0,
+   "proc_mentions": 52,
+   "excerpt_file": "evidence/judgment_ratification_20260730/089530_20230323001515.txt",
+   "excerpt_sha256": "110a7086542d09ec0ac8121fae3f85ce13980510d75bcfca7710741a19aed0a1"
+  }
+ ],
+ "guide": {
+  "판정1_오로스": "HBM계열 언급이 두 해 모두 >0 이고 발췌 문맥이 공정·계측 관여를 보이면 A안(원장 True/True) 추인",
+  "판정2_에이티세미콘": "HBM계열 언급이 전 연도 0이면 비자격 추인"
+ },
+ "auto_reading": {
+  "판정1_hbm_mentions": {
+   "FY2024": 0,
+   "FY2025": 0
+  },
+  "판정2_hbm_mentions": {
+   "FY2019": 0,
+   "FY2020": 0,
+   "FY2021": 0,
+   "FY2022": 0
+  },
+  "판정1_충족(기계판독)": false,
+  "판정2_충족(기계판독)": true
+ },
+ "note": "기계 판독은 참고이며, 추인은 발췌 문맥을 사람이 읽고 서명한다."
+}

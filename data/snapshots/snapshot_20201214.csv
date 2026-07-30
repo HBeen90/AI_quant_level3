@@ -1,0 +1,26 @@
+﻿ticker,name,group,exposure,mem_ratio,float_mcap,eligible,탈락사유,selection_date,ff_market_cap_asof,ff_market_cap_source,free_float_asof,code_commit
+000660,SK하이닉스,anchor,0.05,0.95,52447292381103.75,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+003160,디아이,satellite,0.0,0.85,73720493061.02,False,ADV60<10억;공정/위원회 미확인,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+005290,동진쎄미켐,core,0.0,0.55,972460680472.69,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+005930,삼성전자,anchor,0.01,0.31,313729564465371.5,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+007660,이수페타시스,core,0.0,0.1,113552143053.69601,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-05-15,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+014680,한솔케미칼,core,0.0,0.5,1464968719188.0,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-25,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+033160,엠케이전자,core,0.0,0.5,127034062732.044,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+036540,SFA반도체,satellite,0.0,0.75,451259994036.85205,False,공정/위원회 미확인,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+036930,주성엔지니어링,satellite,0.0,0.7,271296730716.264,False,공정/위원회 미확인,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+039030,이오테크닉스,core,0.0,0.5,873939760533.0,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+042700,한미반도체,satellite,0.1,0.8,240080427091.62,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-27,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+061970,LB세미콘,core,0.0,0.3,315406686931.2,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+064290,인텍플러스,core,0.0,0.4,144863837665.74,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+067310,하나마이크론,core,0.0,0.6,178842886685.54498,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+086390,유니테스트,core,0.0,0.55,394457472044.48004,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+089030,테크윙,satellite,0.0,0.8,297329060126.62,False,공정/위원회 미확인,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+095340,ISC,satellite,0.0,0.7,161583457340.5,False,공정/위원회 미확인,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-27,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+102710,이엔에프테크놀로지,core,0.0,0.65,370148250709.43994,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+104830,원익머트리얼즈,core,0.0,0.6,219801694080.0,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+131290,티에스이,core,0.0,0.6,224015507036.55,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+166090,하나머티리얼즈,core,0.0,0.5,261066710490.3,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+195870,해성디에스,core,0.0,0.35,209915320000.0,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+222800,심텍,satellite,0.0,0.75,348643595135.0,False,공정/위원회 미확인,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+253590,네오셈,satellite,0.0,0.9,47131326891.395996,False,공정/위원회 미확인,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-27,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa
+281820,케이씨텍,core,0.0,0.6,247385718748.19998,True,,2020-11-30,2020-11-30,pykrx 시총 x 원장 free_float,2020-03-30,6b3e8b64565363cd4bb378c8f3a7d121e2dddfaa

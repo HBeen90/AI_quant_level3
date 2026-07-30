@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "status": "AUTOMATED_KIND_QUERY",
+  "official_source": "https://kind.krx.co.kr/disclosure/details.do?method=searchDetailsMain",
+  "kind_type_code": "0350",
+  "period": {
+    "from": "2020-01-01",
+    "to": "2026-07-30"
+  },
+  "universe": {
+    "count": 33,
+    "source": "data/admin_history_normalized.csv",
+    "source_sha256": "d52ff7012fa989f28a22307c857bcdc1416a0392841e4b7f565862506fe2f669"
+  },
+  "query_count": 231,
+  "positive_control": {
+    "ticker": "003620",
+    "name": "KG모빌리티",
+    "result_count": 2,
+    "status": "PASS"
+  },
+  "event_count": 0,
+  "positive_tickers": [],
+  "raw_response_zip": "evidence/kind_admin_history_20260730/raw_kind_responses.zip",
+  "raw_response_zip_sha256": "baf2fbb0d50ea977977ba1fe7ea77386f7cf52e7e74ece7e5528910b31c12c7f",
+  "generated_at_utc": "2026-07-29T18:18:47+00:00",
+  "human_signoff": null,
+  "raw_response_entry_count": 232,
+  "build_environment": {
+    "collector": "analysis/collect_kind_admin_history.py",
+    "collector_sha256": "6564ea5fa31f03bf89173177acf0c5779e04ae3b93bd4ff6ef2135ac1aa9f788",
+    "python": "3.13.9"
+  }
+}

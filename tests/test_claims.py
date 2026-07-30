@@ -12,6 +12,8 @@
   3. 프로젝트 문서 자체가 스캔을 통과하는가
 """
 import os
+import hashlib
+import json
 import subprocess
 import sys
 import tempfile
@@ -22,6 +24,8 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 os.environ.setdefault("INDEX_ASOF", "2026-07-26")   # 결정론 고정
 
+import analysis.verify_claims as claims_module  # noqa: E402
+from analysis.make_backtest_manifest import GATE_KEYS  # noqa: E402
 from analysis.verify_claims import (AUDITS, CLAIMS, FORBIDDEN,  # noqa: E402
                                     _run, c_test_suite, scan_forbidden)
 
@@ -175,6 +179,74 @@ def test_python_sources_are_cp949_compatible():
     print("[OK] Python 소스 CP949 콘솔 호환")
 
 
+def test_final_unlock_requires_current_hashes_and_commit():
+    """FINAL 뒤 산출물·입력·코드가 바뀌면 성과 수치를 다시 잠근다."""
+    def sha(path):
+        return hashlib.sha256(open(path, "rb").read()).hexdigest().upper()
+
+    old_dir = claims_module._BT_DIR
+    old_git_head = claims_module._git_head
+    with tempfile.TemporaryDirectory() as tmp:
+        index_path = os.path.join(tmp, "index_level.csv")
+        with open(index_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write("date,level,turnover\n")
+            f.write("2020-01-01,1000,0\n2020-06-01,1050,0.1\n")
+            f.write("2021-01-01,1100,0.2\n")
+        snapshot = sorted(
+            name for name in os.listdir(claims_module._SNAPSHOT_DIR)
+            if name.startswith("snapshot_") and name.endswith(".csv")
+        )[0]
+        snapshot_path = os.path.join(claims_module._SNAPSHOT_DIR, snapshot)
+        ledger = os.path.join(HERE, "data", "verdict_ledger.csv")
+        gates = {
+            k: {
+                "value": "2026-07-23" if k == "d1_index_asof" else "승인",
+                "by": "위원회",
+                "on": "2026-07-30",
+            }
+            for k in GATE_KEYS
+        }
+        manifest = {
+            "run_type": "FINAL_BACKTEST",
+            "index_asof": "2026-07-23",
+            "code_commit_snapshots": "same-commit",
+            "code_commit_now": "same-commit",
+            "inputs": {"data/verdict_ledger.csv": sha(ledger)},
+            "snapshots": {snapshot: sha(snapshot_path)},
+            "outputs": {"index_level.csv": sha(index_path)},
+            "gates": gates,
+        }
+        with open(os.path.join(tmp, "backtest_run_manifest_FINAL.json"), "w",
+                  encoding="utf-8", newline="\n") as f:
+            json.dump(manifest, f, ensure_ascii=False)
+        claims_module._BT_DIR = tmp
+        claims_module._git_head = lambda: "same-commit"
+        try:
+            assert claims_module._backtest_status()[0] == "final"
+            manifest["inputs"]["data/verdict_ledger.csv"] = "0" * 64
+            with open(os.path.join(tmp, "backtest_run_manifest_FINAL.json"), "w",
+                      encoding="utf-8", newline="\n") as f:
+                json.dump(manifest, f, ensure_ascii=False)
+            assert claims_module._backtest_status()[0] != "final"
+
+            manifest["inputs"]["data/verdict_ledger.csv"] = sha(ledger)
+            with open(os.path.join(tmp, "backtest_run_manifest_FINAL.json"), "w",
+                      encoding="utf-8", newline="\n") as f:
+                json.dump(manifest, f, ensure_ascii=False)
+            claims_module._git_head = lambda: "new-commit"
+            assert claims_module._backtest_status()[0] != "final"
+
+            claims_module._git_head = lambda: "same-commit"
+            with open(index_path, "a", encoding="utf-8") as f:
+                f.write("2021-01-04,9999,0\n")
+            assert claims_module._backtest_status()[0] != "final"
+            assert any("CAGR" in row[0] for row in claims_module.forbidden_rows())
+        finally:
+            claims_module._BT_DIR = old_dir
+            claims_module._git_head = old_git_head
+    print("[OK] FINAL 이후 산출물·입력·코드 변경 시 클레임 잠금 재적용")
+
+
 if __name__ == "__main__":
     test_all_claims_reproduce()
     test_audits_are_separated_from_claims()
@@ -185,4 +257,5 @@ if __name__ == "__main__":
     test_project_docs_pass_scan()
     test_factsheet_is_generated_not_handwritten()
     test_python_sources_are_cp949_compatible()
-    print("\n9/9 클레임 등록부 회귀 테스트 통과")
+    test_final_unlock_requires_current_hashes_and_commit()
+    print("\n10/10 클레임 등록부 회귀 테스트 통과")

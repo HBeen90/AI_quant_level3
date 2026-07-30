@@ -1,1 +1,6 @@
-data/verdict_ledger.csv text eol=lf
+﻿* text=auto eol=lf
+*.csv text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.xlsx binary

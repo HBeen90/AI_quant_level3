@@ -157,8 +157,8 @@ def main(seeds=None, out_path=None):
         hi.loc[order].round(3).astype(str)
     print(rng_tbl.to_string())
     print("\n주의: 합성 시나리오 - 정책 간 차이만 유효. 유지 임계값 27/67은"
-          "\n실측 시점별 노출도 데이터 수령 전의 '잠정안'이며 최적값 주장이 아님."
-          "\n허용 노출도 하한 등 목적함수는 지수위원회 확정 사항.")
+          "\n현행 운영값이며, 최소 2회차 실측 축적 후 방법론 개정 절차로만"
+          "\n재검토한다. 합성 결과는 최적값을 주장하지 않는다.")
     long.to_csv(out_path, index=False, encoding="utf-8-sig")
     print(f"\nlong-format 결과 저장: {out_path}")
     return long

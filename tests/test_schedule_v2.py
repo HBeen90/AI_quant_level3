@@ -306,4 +306,85 @@ assert len(terms16) == 2, f"이관 마커 {len(terms16)}회 - 반복 미달 미�
 assert (hist16["event"] == "under_min_resolved").any()
 print("[OK] 회복 후 재미달: termination_review_due 재발생(term_logged 리셋)")
 
-print("\n16/16 스케줄러 스모크 통과 (안건 1·2·3 + r5 리뷰 회귀 포함)")
+# 17) 정기변경일에 들어온 편출 공지도 유실 없이 D+2 집행
+ev17, _ = build_event_schedule(
+    px9, {dates[0]: snap1, dates[90]: snap2},
+    {dates[90]: [("100009", "상장폐지")]}, cfg=cfg_mid)
+ex17 = [e for e in ev17 if e["reason"] == "exclusion"]
+assert len(ex17) == 1 and ex17[0]["effective_date"] == dates[92], \
+    "정기변경일 공지가 continue 분기에서 유실됨"
+assert "100009" not in ex17[0]["target_weights"].index
+print("[OK] 정기변경일 편출 공지 보존 -> D+2 집행")
+
+# 18) 정기변경 직전 공지의 미래 D+2 예약도 정기변경에서 지우지 않음
+ev18, _ = build_event_schedule(
+    px9, {dates[0]: snap1, dates[90]: snap2},
+    {dates[89]: [("100009", "상장폐지")]}, cfg=cfg_mid)
+ex18 = [e for e in ev18 if e["reason"] == "exclusion"]
+assert len(ex18) == 1 and ex18[0]["effective_date"] == dates[91], \
+    "정기변경을 가로지르는 편출 예약이 초기화됨"
+assert "100009" not in ex18[0]["target_weights"].index
+print("[OK] 정기변경 직전 편출 예약 보존 -> 예정 D+2 집행")
+
+# 19) 패널 끝 D+2 미집행은 조용히 버리지 않고 감사 이력에 남긴다.
+_, hist19x = build_event_schedule(
+    prices, {dates[0]: snap(BASE)},
+    {dates[-1]: [("200001", "상장폐지")]})
+deferred_x = hist19x[hist19x.get("event").eq("deferred_beyond_panel")]
+assert set(deferred_x["kind"]) == {"exclusion"}
+
+# 완료된 월말 뒤 거래일이 1개뿐인 패널: 캡은 D+2 밖으로 이월 표시한다.
+month_breaks = [i for i in range(len(dates) - 1)
+                if dates[i].month != dates[i + 1].month]
+cut = month_breaks[-1]
+px19c = prices.loc[:dates[cut + 1]].copy()
+px19c.loc[dates[cut], "100001"] *= 100.0
+_, hist19c = build_event_schedule(px19c, {dates[0]: snap(BASE)})
+deferred_c = hist19c[hist19c.get("event").eq("deferred_beyond_panel")]
+assert "cap" in set(deferred_c["kind"])
+assert not ((hist19c.get("kind") == "cap") &
+            (hist19c["date"] == dates[cut + 1])).any(), \
+    "월중 패널 마지막 날을 월말로 오인함"
+
+# 하한 미달 상태의 마지막 날 긴급심사도 예약 가능 후보와 함께 이력을 남긴다.
+em_rows = BASE + [
+    ("300001", "긴급후보", CORE, 0.50, np.nan, 9e12, True),
+]
+_, hist19e = build_event_schedule(
+    prices, {dates[0]: snap(BASE)},
+    {dates[10]: [("200001", "합병"), ("200002", "관리종목"),
+                 ("100003", "상장폐지")]},
+    {dates[-1]: snap(em_rows)})
+deferred_e = hist19e[hist19e.get("event").eq("deferred_beyond_panel")]
+assert "emergency_fill" in set(deferred_e["kind"])
+assert "300001" in deferred_e.loc[
+    deferred_e["kind"].eq("emergency_fill"), "adds"].iloc[0]
+print("[OK] 패널 끝 D+2 편출·캡·긴급편입 deferred 감사 마커")
+
+# 20) fail-closed: 휴장일 시행일은 조용히 누락되지 않고 예외로 막힌다.
+#     (build_pit_snapshots 의 bdate_range 와 실거래일 달력이 어긋나는 경우)
+holiday = pd.Timestamp("2026-01-10")            # 토요일 - 거래일 아님
+assert holiday not in prices.index
+try:
+    build_event_schedule(prices, {holiday: snap(BASE)})
+    raise AssertionError("휴장일 시행일이 통과됨 - 정기변경이 조용히 누락")
+except ValueError as e:
+    assert "거래일 달력에 없습니다" in str(e)
+# 거래일 시행일은 정상 동작(오검출 없음)
+_ev20, _ = build_event_schedule(prices, {dates[0]: snap(BASE)})
+assert any(e["reason"] == "regular" for e in _ev20)
+print("[OK] 휴장일 시행일 fail-closed (조용한 정기변경 누락 차단)")
+
+# 21) 수시편출 공지일·긴급심사 공표일도 비거래일이면 조용히 버리지 않는다.
+for adhoc_bad, emrg_bad, label in (
+        ({holiday: [("100001", "상장폐지")]}, None, "수시편출 공지일"),
+        (None, {holiday: snap(BASE)}, "긴급심사 공표일")):
+    try:
+        build_event_schedule(prices, {dates[0]: snap(BASE)},
+                             adhoc_bad, emrg_bad)
+        raise AssertionError(f"비거래일 {label}이 조용히 누락됨")
+    except ValueError as e:
+        assert label in str(e)
+print("[OK] 비거래일 수시편출·긴급심사 기준일 fail-closed")
+
+print("\n21/21 스케줄러 스모크 통과 (패널 끝 D+2 감사 회귀 포함)")

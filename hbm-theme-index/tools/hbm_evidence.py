@@ -1,5 +1,5 @@
 """
-HBM 판정 근거 자동 수집 — 손으로 채워야 하는 3개 값의 '읽을 재료'를 차려준다.
+HBM 판정 근거 자동 수집 - 손으로 채워야 하는 3개 값의 '읽을 재료'를 차려준다.
 
 자동으로 못 채우는 값
   · HBM양산      (규칙 0)   True / False
@@ -50,7 +50,7 @@ def _make_dart(key: str):
 
 OUTDIR = Path(__file__).parent / "evidence"
 
-# 근거 문장을 뽑을 키워드 — 규칙 A(HBM 노출도)와 규칙 C②(고유공정) 판정용
+# 근거 문장을 뽑을 키워드 - 규칙 A(HBM 노출도)와 규칙 C②(고유공정) 판정용
 HBM_KW = ["HBM", "고대역폭", "High Bandwidth"]
 PROC_KW = ["TSV", "하이브리드본딩", "하이브리드 본딩", "본딩", "TC본더", "TC 본더",
            "적층", "패키징", "리플로우", "다이본더"]
@@ -89,7 +89,7 @@ def latest_report(dart, code: str, years_back: int = 2):
 
 
 def sales_section(text: str, span: int = 6000) -> str:
-    """「매출 및 수주상황」 본문 구간 — 제품별 매출 표가 여기 있다.
+    """「매출 및 수주상황」 본문 구간 - 제품별 매출 표가 여기 있다.
 
     목차에도 같은 제목이 나오므로, 뒤쪽(본문) 것을 고른다.
     """
@@ -178,7 +178,7 @@ def ir_links(dart, code: str, limit: int = 6) -> tuple[str, list[str]]:
         if len(out) >= limit:
             break
     if len(out) == (1 if ir_direct else 0):
-        out.append("(홈페이지에서 IR 링크를 찾지 못함 — 사이트에서 직접 탐색 필요)")
+        out.append("(홈페이지에서 IR 링크를 찾지 못함 - 사이트에서 직접 탐색 필요)")
     return home, out
 
 
@@ -230,7 +230,7 @@ def audit_opinion(text: str) -> tuple[str, list[str]]:
 
 
 def dilution_events(dart, code: str, years_back: int = 2) -> list[str]:
-    """유상증자·전환사채 등 희석 이벤트 공시 — 편입 직후 주가 희석 리스크 점검용."""
+    """유상증자·전환사채 등 희석 이벤트 공시 - 편입 직후 주가 희석 리스크 점검용."""
     start = (dt.date.today() - dt.timedelta(days=365 * years_back)).strftime("%Y-%m-%d")
     try:
         lst = dart.list(code, start=start)
@@ -245,7 +245,7 @@ def dilution_events(dart, code: str, years_back: int = 2) -> list[str]:
 
 
 def supply_contracts(dart, code: str, years_back: int = 2) -> list[str]:
-    """단일판매·공급계약 공시 제목 — 누구에게 무엇을 납품하는지의 정황 증거."""
+    """단일판매·공급계약 공시 제목 - 누구에게 무엇을 납품하는지의 정황 증거."""
     start = (dt.date.today() - dt.timedelta(days=365 * years_back)).strftime("%Y-%m-%d")
     try:
         lst = dart.list(code, start=start)
@@ -285,12 +285,12 @@ def build_card(dart, code: str, name: str | None = None,
     n_hbm = sum(text.count(k) for k in HBM_KW)
     n_proc = sum(text.count(k) for k in PROC_KW)
 
-    md = [f"# {name or code} ({code}) — HBM 판정 근거",
+    md = [f"# {name or code} ({code}) - HBM 판정 근거",
           "",
           f"> 출처: **{title}** (접수 {rdate}, 접수번호 {rcept})",
           f"> 본문 {len(text):,}자 · HBM 언급 **{n_hbm}회** · HBM 고유공정 키워드 **{n_proc}회**",
           "",
-          "## ■ 판정 입력값 — 여기에 적으세요",
+          "## ■ 판정 입력값 - 여기에 적으세요",
           "",
           "| 항목 | 값 | 근거(본 문서 어느 부분) |",
           "|---|---|---|",
@@ -319,7 +319,7 @@ def build_card(dart, code: str, name: str | None = None,
           "## 1. 제품별 매출 (「매출 및 수주상황」 본문)",
           "",
           "```",
-          (sales[:4000] if sales else "(해당 섹션을 찾지 못함 — 아래 원문 링크에서 직접 확인)"),
+          (sales[:4000] if sales else "(해당 섹션을 찾지 못함 - 아래 원문 링크에서 직접 확인)"),
           "```",
           "",
           "## 2. HBM 언급 문장",
@@ -401,14 +401,14 @@ def main():
         if res["상태"] != "ok":
             print(res["상태"])
         else:
-            warn = ("  ⚠ " + res["관리종목"]) if res["관리종목"] != "해당없음" else ""
+            warn = ("  [WARN] " + res["관리종목"]) if res["관리종목"] != "해당없음" else ""
             print(f"HBM {res['HBM언급']}회 · 공정 {res['고유공정언급']}회 · "
                   f"계약 {res['공급계약수']}건 · 감사 {res['감사의견']}{warn}")
 
     summary = pd.DataFrame(rows)
     OUTDIR.mkdir(exist_ok=True)
 
-    # 판정 입력 템플릿 — 카드를 읽고 이 CSV만 채우면 build_index.py 에 바로 들어간다
+    # 판정 입력 템플릿 - 카드를 읽고 이 CSV만 채우면 build_index.py 에 바로 들어간다
     tpl = summary[["종목명", "코드"]].copy()
     if "감사의견" in summary.columns:                  # 자동 추출값 미리 채움
         tpl["감사의견"] = summary["감사의견"]

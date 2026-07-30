@@ -1,0 +1,34 @@
+﻿종목명,코드,감사의견,관리종목,유형,HBM양산,HBM노출도,메모리향비중,HBM공정확인,위원회확인
+삼성전자,005930,적정,False,메모리제조,True,,0.31,True,True
+SK하이닉스,000660,적정,False,메모리제조,True,,0.95,True,True
+한미반도체,042700,적정,False,반도체 장비,False,0.70,0.75,True,True
+테크윙,089030,적정,False,반도체 장비,False,,,False,True
+하나마이크론,067310,적정,False,후공정/패키징,False,,,False,False
+ISC,095340,의견거절,False,후공정/테스트,False,,,False,False
+와이씨켐,112290,적정,False,반도체 소재,False,,,False,True
+엠케이전자,033160,적정,False,반도체 소재,False,,,False,False
+심텍,222800,적정,False,기판/PCB,False,,,False,False
+대덕전자,353200,적정,False,기판/PCB,False,,,False,False
+이엔에프테크놀로지,102710,적정,False,반도체 소재,False,,,False,False
+솔브레인,357780,적정,False,반도체 소재,False,,,False,False
+한솔케미칼,014680,적정,False,반도체 소재,False,,,False,False
+HPSP,403870,적정,False,반도체 장비,False,,,False,False
+오픈엣지테크놀로지,394280,적정,False,반도체 IP/설계,False,,,False,False
+이오테크닉스,039030,적정,False,반도체 장비,False,,,False,False
+오로스테크놀로지,322310,적정,False,반도체 장비,False,,,True,False
+인텍플러스,064290,적정,False,반도체 장비,False,,,False,False
+티에스이,131290,적정,False,반도체 장비,False,,,False,False
+네오셈,253590,적정,False,반도체 장비,False,,0.90,False,False
+유니테스트,086390,적정,False,반도체 장비,False,,0.74,False,False
+디아이,003160,적정,False,반도체 장비,False,,0.85,False,True
+넥스틴,348210,적정,False,반도체 장비,False,,,True,True
+SFA반도체,036540,적정,False,후공정/패키징,False,,0.81,False,False
+LB세미콘,061970,적정,False,후공정/패키징,False,,,False,False
+해성디에스,195870,적정,False,반도체 소재/기판,False,,,False,False
+동진쎄미켐,005290,적정,False,반도체 소재,False,,,False,False
+하나머티리얼즈,166090,적정,False,반도체 소재,False,,,False,False
+원익머트리얼즈,104830,적정,False,반도체 소재,False,,,False,False
+티이엠씨,425040,적정,False,반도체 소재,False,,,False,False
+케이씨텍,281820,적정,False,반도체 장비,False,,,False,False
+주성엔지니어링,036930,적정,False,반도체 장비,False,,,False,False
+이수페타시스,007660,적정,False,기판/PCB,False,,,False,False

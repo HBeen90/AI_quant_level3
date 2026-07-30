@@ -1,38 +1,49 @@
 {
-  "as_of": "2026-07-23",
-  "status": "FINAL_CROSS_SECTION",
-  "reviewer": "노민수",
-  "scope": "2026-07-23 후보 33종목의 규칙 0/A/C 판정과 확정 7종목 비중",
-  "not_valid_for": [
-    "2026-07-23 이전 정기변경 심사의 소급 판정",
-    "2019-2025 역사적 PIT 백테스트",
-    "종목별 원천 공시 URL 및 개별 공개일의 대체"
-  ],
-  "files": {
-    "evidence/judgment_snapshot_20260723.csv": {
-      "sha256": "2BD4E2A01A851CF6D2BB2230F9B975019D58D3A513E7DA7EE06C8B33C964EFD4",
-      "hash_mode": "utf8-lf",
-      "role": "두 PDF를 구조화하고 FY2025 FINAL 원장 정본과 동기화한 횡단면 스냅샷"
-    },
-    "data/verdict_ledger.csv": {
-      "sha256": "305F72F98E6317370667BDD24AE6D1E152A5181019C123D6AAAFA10C05B1624C",
-      "hash_mode": "utf8-lf",
-      "role": "FY2025 HBM 노출도·메모리향 비율의 정본"
-    },
-    "evidence/source_docs/hbm_judgment_values_33_20260723.pdf": {
-      "sha256": "0E0F5ED90AE7686A154DD797B48717C69F2EC02A1F508E896EE0AAF3A6B4B1B1",
-      "role": "33종목 HBM노출도·메모리향비중 확정표"
-    },
-    "evidence/source_docs/hbm_judgment_result_20260723.pdf": {
-      "sha256": "01FE4440D000ED3F6D3E0E9AEC82137D81A7829051E8598DC01868806ABDBEDD",
-      "role": "종목별 편입·탈락 근거와 최종 비중 보고서"
-    },
-    "data/constituents/constituents_handoff_20260723.csv": {
-      "sha256": "EB3FC8D69F5332C4B9F9D15F5A1F5CCCF58879AC33A78F52FFA91F9EDE895ED5",
-      "hash_mode": "utf8-lf",
-      "role": "유동시총과 공표 비중을 포함한 비중 산정 인계본"
-    }
+ "as_of": "2026-07-23",
+ "status": "FINAL_CROSS_SECTION",
+ "reviewer": "노민수",
+ "scope": "2026-07-23 후보 33종목의 규칙 0/A/C 판정과 확정 7종목 비중",
+ "not_valid_for": [
+  "2026-07-23 이전 정기변경 심사의 소급 판정",
+  "2019-2025 역사적 PIT 백테스트",
+  "종목별 원천 공시 URL 및 개별 공개일의 대체"
+ ],
+ "files": {
+  "evidence/judgment_snapshot_20260723.csv": {
+   "sha256": "2BD4E2A01A851CF6D2BB2230F9B975019D58D3A513E7DA7EE06C8B33C964EFD4",
+   "hash_mode": "utf8-lf",
+   "role": "두 PDF를 구조화하고 FY2025 FINAL 원장 정본과 동기화한 횡단면 스냅샷"
   },
-  "decision_record": "docs/verdict_ledger_final_decision_record_20260729.md",
-  "construction_note": "PDF 표를 사람이 구조화한 뒤 코드로 행 수·티커·임계값·군·비중을 교차검증한다. 삼성전자 mem_ratio와 인텍플러스 hbm_exposure는 종결 기록에 따라 FY2025 FINAL 원장 값으로 동기화했다."
+  "data/verdict_ledger.csv": {
+   "sha256": "D042715FBA34AD6479634683AE03770F27D13550E9D1D1DEA3E3A48BF1F1BA01",
+   "hash_mode": "utf8-lf",
+   "role": "FY2025 HBM 노출도·메모리향 비율·판정군의 정본 (2026-07-30 322310 정정 반영)"
+  },
+  "evidence/source_docs/hbm_judgment_values_33_20260723.pdf": {
+   "sha256": "0E0F5ED90AE7686A154DD797B48717C69F2EC02A1F508E896EE0AAF3A6B4B1B1",
+   "role": "33종목 HBM노출도·메모리향비중 확정표"
+  },
+  "evidence/source_docs/hbm_judgment_result_20260723.pdf": {
+   "sha256": "01FE4440D000ED3F6D3E0E9AEC82137D81A7829051E8598DC01868806ABDBEDD",
+   "role": "종목별 편입·탈락 근거와 최종 비중 보고서"
+  },
+  "data/constituents/constituents_handoff_20260723.csv": {
+   "sha256": "EB3FC8D69F5332C4B9F9D15F5A1F5CCCF58879AC33A78F52FFA91F9EDE895ED5",
+   "hash_mode": "utf8-lf",
+   "role": "유동시총과 공표 비중을 포함한 비중 산정 인계본"
+  }
+ },
+ "decision_record": "docs/verdict_ledger_final_decision_record_20260729.md",
+ "construction_note": "PDF 표를 사람이 구조화한 뒤 코드로 행 수·티커·임계값·군·비중을 교차검증한다. 삼성전자 mem_ratio와 인텍플러스 hbm_exposure는 종결 기록에 따라 FY2025 FINAL 원장 값으로 동기화했다.",
+ "errata": [
+  {
+   "id": "E1-322310",
+   "recorded_at": "2026-07-30",
+   "scope": "322310 오로스테크놀로지 판정(expected_group=미편입, fail C2)",
+   "resolution": "2026-07-30 DART 원문 검사(FY2024·25 HBM 언급 0회, TSV 일반 서술만)로 원장 FY2024·FY2025를 False/False로 정정 - 단면(C2 미편입)이 정본으로 확정되어 단면·원장 정합 회복. 발췌: evidence/judgment_ratification_20260730/",
+   "status": "RESOLVED_BY_LEDGER_CORRECTION_20260730",
+   "record": "docs/judgment_record_322310_atsemicon_20260730.md",
+   "alignment_exception": "analysis/verify_judgment_snapshot.ALIGNMENT_GROUP_EXCEPTIONS"
+  }
+ ]
 }

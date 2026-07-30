@@ -1,0 +1,2 @@
+﻿ticker,name,query_start,query_end,kind_type_code,expected_title_fragment,result_count,matched,titles,response_file,response_sha256,queried_at_utc
+003620,KG모빌리티,2020-01-01,2020-12-31,0350,관리종목지정,2,Y,관리종목지정사유변경(회생절차개시신청) | 관리종목지정(반기검토의견 의견거절 ),positive_control/003620_2020.html,8d5302dcd7e6498b8f84db74006ce323f20a4d0a8b721441edf2d2edaa717b63,2026-07-29T18:18:47+00:00

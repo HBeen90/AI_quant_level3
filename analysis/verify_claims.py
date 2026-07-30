@@ -273,6 +273,75 @@ def c_final_ledger():
     )
 
 
+def c_kind_admin_history():
+    """D3 KIND 0350 조사 결과와 보존 원응답 232건을 재검증한다."""
+    import hashlib
+    import json
+    import zipfile
+
+    data_dir = os.path.join(HERE, "data")
+    evidence_dir = os.path.join(
+        HERE, "evidence", "kind_admin_history_20260730")
+    summary = pd.read_csv(
+        os.path.join(data_dir, "admin_history_kind_2020_2026.csv"),
+        dtype={"코드": str, "ticker": str}).fillna("")
+    query = pd.read_csv(
+        os.path.join(evidence_dir, "query_log.csv"),
+        dtype={"ticker": str, "response_sha256": str})
+    control = pd.read_csv(
+        os.path.join(evidence_dir, "control_log.csv"),
+        dtype={"ticker": str, "response_sha256": str})
+    manifest = json.loads(open(
+        os.path.join(evidence_dir, "run_manifest.json"),
+        encoding="utf-8").read())
+    raw_zip = os.path.join(evidence_dir, "raw_kind_responses.zip")
+
+    rows = pd.concat([
+        query[["response_file", "response_sha256"]],
+        control[["response_file", "response_sha256"]],
+    ], ignore_index=True)
+    matched = 0
+    with zipfile.ZipFile(raw_zip) as archive:
+        names = set(archive.namelist())
+        for row in rows.itertuples(index=False):
+            if row.response_file in names and hashlib.sha256(
+                    archive.read(row.response_file)).hexdigest().lower() \
+                    == row.response_sha256.lower():
+                matched += 1
+
+    collector = os.path.join(
+        HERE, "analysis", "collect_kind_admin_history.py")
+    ok = (
+        len(summary) == 33
+        and summary["ticker"].nunique() == 33
+        and set(summary["ticker"]) == set(query["ticker"])
+        and summary["지정여부(Y/N)"].eq("N").all()
+        and pd.to_numeric(summary["조회건수"]).eq(0).all()
+        and len(query) == 231
+        and query.groupby("ticker").size().eq(7).all()
+        and pd.to_numeric(query["result_count"]).eq(0).all()
+        and query["kind_type_code"].astype(str).eq("350").all()
+        and len(control) == 1
+        and str(control.iloc[0]["matched"]).upper() == "Y"
+        and int(control.iloc[0]["result_count"]) == 2
+        and matched == 232
+        and manifest.get("query_count") == 231
+        and manifest.get("event_count") == 0
+        and manifest.get("positive_control", {}).get("status") == "PASS"
+        and manifest.get("raw_response_entry_count") == 232
+        and hashlib.sha256(open(raw_zip, "rb").read()).hexdigest().lower()
+        == str(manifest.get("raw_response_zip_sha256", "")).lower()
+        and hashlib.sha256(open(collector, "rb").read()).hexdigest().lower()
+        == str(manifest.get("build_environment", {}).get(
+            "collector_sha256", "")).lower()
+    )
+    return ok, (
+        f"33종목·표적 231질의에서 관리종목 이벤트 0건 · "
+        f"양성 대조 2건 · 원응답 해시 {matched}/232 일치 "
+        f"(승인 서명 대기)"
+    )
+
+
 def c_dashboard_weights():
     """대시보드 표시 비중이 엔진에서 재현되는가 / 조문 상한을 지키는가."""
     from analysis.audit_dashboard_numbers import SHOWN_2026
@@ -335,9 +404,15 @@ CLAIMS = [
      "실측(한 시점 교차검증)"),
     ("역사적 PIT 판정 원장은 strict FINAL 215행이며 NO_DATA 8행은 별도 보존된다",
      c_final_ledger, "data/verdict_ledger.csv", "실측(입력계약 검증)"),
+    ("관리종목 이력 조사는 공식 KIND 0350 정확종목 질의와 양성 대조로 재현된다",
+     c_kind_admin_history, "evidence/kind_admin_history_20260730/run_manifest.json",
+     "실측(공식 원응답 교차검증)"),
     ("전 테스트 스위트가 통과한다",
      c_test_suite, "tests/run_all.py", "실측(실행)"),
 ]
+
+# (실측 백테스트 클레임은 c_backtest_selfconsistent 정의 뒤에서 조건부로
+#  등록한다 - forbidden_rows() 아래 참조)
 
 #: 감사 '결과'. 문장이 결함을 주장하므로 PASS = **결함이 재현됨**을 뜻한다.
 #: CLAIMS 와 섞으면 "발표에 쓸 문장" 표에 결함이 끼고, 결함을 고치는 순간
@@ -349,16 +424,199 @@ AUDITS = [
 ]
 
 #: 등록되지 않았으므로 **인용 금지**인 수치 - 발표·문서·화면 어디에도 쓰지 않는다
+#: (백테스트 성과 수치는 forbidden_rows() 가 실행 상태에 따라 동적으로 얹는다
+#:  - 잠정 실행 단계에서는 금지 유지, FINAL 매니페스트가 있어야 해제)
 FORBIDDEN = [
-    ("지수 레벨 / 누적수익률 / CAGR", "지수 시계열이 산출된 적 없음"),
-    ("연율화 회전율 (48.5% · 24.6% 등)", "실측 백테스트 미실행"),
-    ("변동성 / MDD / 샤프지수", "동일"),
-    ("벤치마크 수익률·MDD·상관계수", "벤치마크 지수를 조회한 적 없음"),
     ("DART 215건 독립 재수집 대조 완료 주장",
      "FINAL_INPUT_CONTRACT은 완성됐으나 L09 계보 검증은 아직 PARTIAL"),
-    ("종목별 ADV60 · 유동시총 시계열", "pykrx 수집 미실행 (2026-07-23 1회분 제외)"),
-    ("생존편향 크기 (1.5~3.0%p 등)", "대조 미실시 - 방향만 고지 가능"),
+    ("종목별 ADV60 · 유동시총 시계열",
+     "pykrx 수집 미실행 (2026-07-23 1회분·PIT 스냅샷 13회분 제외)"),
+    ("생존편향 크기 (1.5~3.0%p 등)",
+     "크기 미측정 - 방향·개별 사례 판정만 고지 가능"),
 ]
+
+
+# --------------------------------------------------------------------------
+# 실측 백테스트 상태 - FINAL 매니페스트 게이트
+# --------------------------------------------------------------------------
+_BT_DIR = os.path.join(HERE, "out", "backtest")
+_SNAPSHOT_DIR = os.path.join(HERE, "data", "snapshots")
+
+
+def _sha_file(path):
+    import hashlib as _h
+    return _h.sha256(open(path, "rb").read()).hexdigest().upper()
+
+
+def _git_head():
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=HERE, capture_output=True,
+            text=True, timeout=10)
+        return result.stdout.strip() if result.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def _final_manifest_valid(m) -> bool:
+    """FINAL 매니페스트의 게이트·해시가 현재 파일과 전부 일치해야 해제된다.
+
+    산출 CSV·스냅샷·원장 어느 하나라도 매니페스트와 다르면(누락 포함)
+    FINAL 로 인정하지 않는다 - 사후 변조 시 수치가 자동으로 다시 잠긴다.
+    """
+    from analysis.make_backtest_manifest import GATE_KEYS
+
+    gates = m.get("gates") or {}
+    if set(gates) != set(GATE_KEYS) or not all(
+            all(str(gates[key].get(field, "")).strip()
+                for field in ("value", "by", "on"))
+            for key in GATE_KEYS):
+        return False
+    if str(gates["d1_index_asof"]["value"]).strip() \
+            != str(m.get("index_asof", "")).strip():
+        return False
+    if not all(re.fullmatch(r"\d{4}-\d{2}-\d{2}",
+                            str(gates[key]["on"]).strip())
+               for key in GATE_KEYS):
+        return False
+    snapshot_commit = str(m.get("code_commit_snapshots") or "").strip()
+    manifest_commit = str(m.get("code_commit_now") or "").strip()
+    if not snapshot_commit or snapshot_commit != manifest_commit \
+            or manifest_commit != _git_head():
+        return False
+    try:
+        outputs = m.get("outputs") or {}
+        snapshots = m.get("snapshots") or {}
+        inputs = m.get("inputs") or {}
+        if not outputs or not snapshots or not inputs:
+            return False
+        for name, want in outputs.items():
+            if os.path.basename(name) != name:
+                return False
+            p = os.path.join(_BT_DIR, name)
+            if not os.path.exists(p) or _sha_file(p) != str(want).upper():
+                return False
+        for name, want in snapshots.items():
+            if os.path.basename(name) != name:
+                return False
+            p = os.path.join(_SNAPSHOT_DIR, name)
+            if not os.path.exists(p) or _sha_file(p) != str(want).upper():
+                return False
+        for name, want in inputs.items():
+            p = os.path.abspath(os.path.join(
+                HERE, name.replace("/", os.sep)))
+            if os.path.commonpath((HERE, p)) != HERE:
+                return False
+            if not os.path.exists(p) or _sha_file(p) != str(want).upper():
+                return False
+    except OSError:
+        return False
+    return True
+
+
+def _backtest_status():
+    """(status, manifest) - status: 'none' | 'provisional' | 'final'.
+
+    FINAL 은 make_backtest_manifest.py --final 이 게이트 5건(fail-closed)을
+    통과해 생성한 backtest_run_manifest_FINAL.json 이 있을 때만 인정한다.
+    """
+    import glob as _glob
+    import json as _json
+    best = ("none", None)
+    for p in sorted(_glob.glob(
+            os.path.join(_BT_DIR, "backtest_run_manifest*.json"))):
+        try:
+            m = _json.loads(open(p, encoding="utf-8-sig").read())
+        except Exception:
+            continue
+        rt = str(m.get("run_type", ""))
+        if rt == "FINAL_BACKTEST":
+            if _final_manifest_valid(m):
+                return "final", m
+            # 게이트·해시 불일치 FINAL 은 무효 - 변조·구버전 산출물로는
+            # 수치가 풀리지 않는다 (잠정 매니페스트가 있으면 잠정으로 강등)
+        elif rt.startswith("PROVISIONAL"):
+            best = ("provisional", m)
+    return best
+
+
+def _backtest_metrics():
+    """index_level.csv 에서 성과 지표를 독립 재계산한다."""
+    bt = pd.read_csv(os.path.join(_BT_DIR, "index_level.csv"),
+                     index_col=0, parse_dates=True)
+    lv = bt["level"].astype(float)
+    yrs = (lv.index[-1] - lv.index[0]).days / 365.25
+    cum = lv.iloc[-1] / lv.iloc[0] - 1
+    cagr = (lv.iloc[-1] / lv.iloc[0]) ** (1 / yrs) - 1
+    vol = float(lv.pct_change().std()) * float(np.sqrt(252))
+    mdd = float((lv / lv.cummax() - 1).min())
+    to_total = float(bt["turnover"].astype(float).sum())
+    return {"level": float(lv.iloc[-1]), "cum": float(cum),
+            "cagr": float(cagr), "vol": vol, "mdd": mdd,
+            "turnover_total": to_total, "years": yrs}
+
+
+def c_backtest_selfconsistent():
+    """실측 백테스트 산출물의 자기일관성 + 입력 계보를 재검증한다."""
+    status, m = _backtest_status()
+    x = _backtest_metrics()
+    ok = all(np.isfinite(v) for v in
+             (x["cum"], x["cagr"], x["vol"], x["mdd"], x["turnover_total"]))
+    notes = []
+    if m:
+        import hashlib as _h
+        want = (m.get("inputs") or {}).get("data/verdict_ledger.csv")
+        if want:
+            got = _h.sha256(open(os.path.join(
+                HERE, "data", "verdict_ledger.csv"), "rb").read()) \
+                .hexdigest().upper()
+            same = got == str(want).upper()
+            ok = ok and same
+            notes.append("원장 해시 " + ("일치" if same else "불일치"))
+        if m.get("code_commit_snapshots"):
+            notes.append(f"스냅샷 커밋 {str(m['code_commit_snapshots'])[:7]}")
+    if status == "final":
+        det = (f"레벨 {x['level']:,.2f} · 누적 {x['cum']:.4f} · "
+               f"CAGR {x['cagr']:.4f} · 변동성 {x['vol']:.4f} · "
+               f"MDD {x['mdd']:.4f}")
+    else:
+        det = ("재계산 5지표 유한·정합 - 수치는 FINAL 게이트"
+               "(D1·D2·D3·판정 추인 2건) 통과 후 공개")
+    if notes:
+        det += " · " + " · ".join(notes)
+    return ok, det
+
+
+def forbidden_rows():
+    """실행 상태를 반영한 인용 금지 목록 (동적 + 정적)."""
+    status, _ = _backtest_status()
+    rows = []
+    if status == "none":
+        rows += [("지수 레벨/누적수익률/CAGR/변동성/MDD/회전율",
+                  "실측 백테스트 미실행"),
+                 ("벤치마크 수익률·상관계수·추적오차",
+                  "벤치마크 지수를 조회한 적 없음")]
+    elif status == "provisional":
+        rows += [("지수 레벨/누적수익률/CAGR/변동성/MDD/회전율 (잠정 실측치 일체)",
+                  "잠정 실행 완료 - FINAL 게이트(D1·D2·D3·판정 추인 2건) 통과 "
+                  "후 make_backtest_manifest.py --final 로 해제"),
+                 ("벤치마크 수익률·상관계수·추적오차",
+                  "벤치마크 PROVISIONAL - resolver·CONFIRMED 반영 재실행 전")]
+    else:  # final
+        if not os.path.exists(os.path.join(_BT_DIR, "benchmark_inference.csv")):
+            rows += [("벤치마크 수익률·상관계수·추적오차",
+                      "FINAL 실행에 벤치마크 미포함 - CONFIRMED 반영 재실행 필요")]
+    return rows + FORBIDDEN
+
+
+# 실측 백테스트 산출물이 존재할 때만 등록되는 클레임. 잠정 단계에서는
+# 재현값에 수치를 노출하지 않으며(인용 금지 유지), FINAL 매니페스트가
+# 생성되면 같은 클레임이 수치를 공개한다 - 등록부 원칙과 게이트를 양립시킨다.
+if os.path.exists(os.path.join(_BT_DIR, "index_level.csv")):
+    CLAIMS.append(
+        ("실측 백테스트 산출물은 지표 재계산·입력 계보와 자기일관적으로 재현된다",
+         c_backtest_selfconsistent, "out/backtest/index_level.csv",
+         "실측(산출물 자기검증)"))
 
 #: 실제로 유출된 적이 있는 구체 수치 - 문서·화면에서 자동으로 잡아낸다.
 #: "규칙을 문서에 썼다"와 "규칙이 지켜지는지 기계가 본다"는 다르다.
@@ -394,11 +652,42 @@ _MINUS = "\u2212"   # 수학용 유니코드 마이너스도 ASCII '-' 로 정�
 _NUM_RE = re.compile(r"(?<![\d.,])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?")
 
 
+def _provisional_literals():
+    """잠정 백테스트 실측치의 유출을 스캐너로 잡기 위한 동적 금지 수치.
+
+    FINAL 게이트 전에는 잠정 수치도 발표·문서에 쓸 수 없으므로, 산출물에서
+    직접 파생한 대표 표기(6자리·% 환산·지수 레벨)를 금지 목록에 얹는다.
+    FINAL 이 되면 자동으로 비워져 해제된다. 값이 짧아 오탐 위험이 있는
+    반올림(1.4·64.6 등)은 넣지 않는다 - 구체 표기만 잡는다.
+    """
+    status, _ = _backtest_status()
+    if status != "provisional":
+        return []
+    try:
+        x = _backtest_metrics()
+    except Exception:
+        return []
+    lits = [
+        (f"{x['cum']:.6f}", "잠정 누적수익률"),
+        (f"{x['cum'] * 100:.1f}", "잠정 누적수익률(%)"),
+        (f"{x['cagr']:.6f}", "잠정 CAGR"),
+        (f"{x['cagr'] * 100:.2f}", "잠정 CAGR(%)"),
+        (f"{x['vol']:.6f}", "잠정 변동성"),
+        (f"{x['vol'] * 100:.2f}", "잠정 변동성(%)"),
+        (f"{x['mdd']:.6f}", "잠정 MDD"),
+        (f"{x['mdd'] * 100:.2f}", "잠정 MDD(%)"),
+        (f"{x['level']:.2f}", "잠정 지수 레벨"),
+        (f"{x['level']:,.2f}", "잠정 지수 레벨"),
+    ]
+    return [(lit, what + " (FINAL 게이트 전 인용 금지)") for lit, what in lits]
+
+
 def _forbidden_values():
-    """FORBIDDEN_LITERALS 를 float 로 정규화한 (값, 표기, 설명) 목록.
-    '3,161.9' 와 '3161.9' 처럼 값이 같은 항목은 하나로 합친다(첫 표기 유지)."""
+    """FORBIDDEN_LITERALS(+동적 잠정 수치)를 float 로 정규화한
+    (값, 표기, 설명) 목록. '3,161.9' 와 '3161.9' 처럼 값이 같은 항목은
+    하나로 합친다(첫 표기 유지)."""
     seen, out = set(), []
-    for lit, what in FORBIDDEN_LITERALS:
+    for lit, what in FORBIDDEN_LITERALS + _provisional_literals():
         v = float(lit.replace(",", ""))
         if v in seen:
             continue
@@ -538,21 +827,24 @@ FACTSHEET_TAIL = """
   재선정하고 비중까지 공표 반올림 범위로 맞췄습니다.
 - **look-ahead를 구조적으로 차단했고, 그 규율이 결과를 바꾼다는 것까지 보였습니다.**
 
-성과 수치가 없어도 **방법론의 완성도**는 이것으로 증명됩니다. 역사적 PIT
-판정 원장은 완성됐고, 시장 데이터·벤치마크가 확정되기 전에는 성과를
-산출하지 않는다고 말하는 쪽이 못 지킬 숫자를 띄우는 것보다 강합니다.
+성과 수치를 아직 공개하지 않아도 **방법론의 완성도**는 이것으로 증명됩니다.
+역사적 PIT 원장(FINAL 215행)으로 전구간 잠정 백테스트까지 실행·자기검증을
+마쳤고, 위원회 게이트(D1 기준일·D2 벤치마크·D3 수시변경·판정 추인 2건)가
+닫히기 전에는 수치를 공개하지 않는 규율이 그대로 작동하고 있습니다.
 
 ---
 
-## 인용 금지 수치를 쓰고 싶어지면
+## 인용 금지 수치를 쓰고 싶어지면 (해제 절차)
 
-역사적 PIT 판정 원장은 strict FINAL 215행으로 완성됐습니다. 성과 수치를
-해제하려면 시장 데이터 커버리지와 벤치마크 계보를 확정하고 전구간
-백테스트를 실행해야 합니다. 없는 연도를 보간하거나 2026 판정을 과거에
-복사하지 않습니다.
+백테스트 성과 수치의 해제는 손으로 목록을 지우는 것이 아니라 **게이트로**
+합니다. ① `data/final_run_gates.json` 에 5개 게이트(D1 기준일·D2 벤치마크·
+D3 수시변경·판정 추인 2건)의 value/by/on 을 기입하고 ② `run_backtest_final.ps1`
+로 확정 실행하면 `make_backtest_manifest.py --final` 이 FINAL 매니페스트를
+생성하고, 이 등록부가 자동으로 수치를 공개 전환합니다. 게이트가 하나라도
+비어 있으면 FINAL 은 생성되지 않습니다(fail-closed).
 
-그때 `verify_claims.py` 에 재현 함수를 추가하고 `FORBIDDEN` 에서 해당
-항목을 지우십시오. 그 순서를 지키면 이 사고는 다시 나지 않습니다.
+그 외의 새 수치는 지금처럼 재현 함수를 먼저 추가하십시오. 그 순서를
+지키면 이 사고는 다시 나지 않습니다.
 """
 
 
@@ -614,7 +906,7 @@ def main() -> int:
         body = (_md_table(rows) + "\n\n"
                 + "**인용 금지 (미등록 수치)**\n\n"
                 + "| 수치 | 왜 못 쓰는가 |\n|---|---|\n"
-                + "\n".join(f"| {n} | {w} |" for n, w in FORBIDDEN) + "\n\n"
+                + "\n".join(f"| {n} | {w} |" for n, w in forbidden_rows()) + "\n\n"
                 + "**감사 결과 (결함 재현 - 발표 문장이 아님)**\n\n"
                 + _md_table(arows, "감사 항목"))
         if a.factsheet:
@@ -655,7 +947,7 @@ def main() -> int:
     print(f"{len(rows) - failed}/{len(rows)} 발표 문장 재현 성공"
           + ("" if not failed else f" - {failed}개 실패, 해당 문장 사용 금지"))
     print("\n[인용 금지 - 아래 수치는 어떤 문서·화면에도 쓰지 않는다]")
-    for n, why in FORBIDDEN:
+    for n, why in forbidden_rows():
         print(f"  · {n:38s} {why}")
     print("\n문서 점검:  python analysis/verify_claims.py --scan 발표자료.md")
     print("새 수치를 쓰려면 이 파일에 재현 함수를 먼저 추가하십시오.")

@@ -3,6 +3,7 @@ __pycache__/
 .ipynb_checkpoints/
 .env
 .venv/
+docs_cache/
 data/raw/*.xlsx
 data/raw/*.csv
 
@@ -17,6 +18,11 @@ evidence/source_docs/*
 !evidence/source_docs/HBM_verdict_ledger_FINAL_20260729.xlsx
 !evidence/source_docs/FINAL_LEDGER_REPORT_20260729.md
 !evidence/source_docs/final_ledger_manifest.json
-!evidence/source_docs/source_ledger_final_20260729.xlsx
 
 notebooks/00_concept_check.ipynb
+
+# D3 KIND 조사 증거(2026-07-30) - 커밋 대상 예외
+!evidence/kind_admin_history_20260730/
+
+# 판정 추인 DART 발췌·해시(2026-07-30) - 정정 근거
+!evidence/judgment_ratification_20260730/

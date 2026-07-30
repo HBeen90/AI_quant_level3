@@ -133,9 +133,50 @@ def load_snapshot(path: Path = DEFAULT_SNAPSHOT) -> pd.DataFrame:
     return d
 
 
+# 판정 결과(군) 대조의 문서화된 예외. 2026-07-30 원문 검사로 322310 원장
+# FY2024·25가 False/False 로 정정되어 단면과 원장이 정합 - 현재 예외 없음.
+# 이력: docs/judgment_record_322310_atsemicon_20260730.md (번복 기록),
+#       docs/verdict_ledger_correction_20260730.md (원장 정정 공표)
+ALIGNMENT_GROUP_EXCEPTIONS = set()
+
+
+def _flag_bool(v) -> bool:
+    """공란·NaN은 False(미확인)로 정규화한 엄격 불리언."""
+    if pd.isna(v):
+        return False
+    s = str(v).strip().lower()
+    if s in {"true", "1", "1.0", "y", "yes"}:
+        return True
+    if s in {"false", "0", "0.0", "n", "no", "", "nan"}:
+        return False
+    raise ValueError(f"불리언 해석 불가: {v!r}")
+
+
+def _derived_group(row) -> str:
+    """FY2025 원장 한 행 -> 규칙 0/A/C 판정군 (신규 임계값 기준)."""
+    if str(row["sector"]).strip() == "메모리제조" \
+            and _flag_bool(row["hbm_massproduction"]):
+        return "앵커"
+    if float(row["hbm_exposure"]) >= 0.30:
+        return "핵심"
+    if float(row["mem_ratio"]) >= 0.70 and _flag_bool(row["process_confirmed"]) \
+            and _flag_bool(row["committee_ok"]):
+        return "위성"
+    return "미편입"
+
+
 def verify_ledger_alignment(snapshot: pd.DataFrame,
                             ledger_path: Path = DEFAULT_LEDGER) -> float:
-    """횡단면 수치가 FY2025 FINAL 원장의 정본과 같은지 확인한다."""
+    """횡단면이 FY2025 FINAL 원장의 정본과 같은지 확인한다.
+
+    1) 수치(hbm_exposure·mem_ratio)는 전 종목 엄격 일치.
+    2) 판정 결과: 원장 FY2025에서 규칙 0/A/C로 유도한 군이 단면의
+       expected_group과 일치해야 한다(문서화된 예외 제외). 개별 플래그의
+       원시값 비교가 아니라 군 유도 비교인 이유 - 단면의 플래그 컬럼은
+       판정 경로에 필요한 확인만 채우는 의미론이라 원장(사실 판정)과
+       직비교가 성립하지 않는다. 322310 사례처럼 판정 충돌이 수치 대조만으로
+       조용히 공존하는 것을 이 검사가 막는다.
+    """
     ledger = load_ledger(str(ledger_path))
     annual = ledger.loc[ledger["fiscal_year"].eq(2025)].set_index("ticker")
     snap = snapshot.set_index("ticker")
@@ -153,6 +194,15 @@ def verify_ledger_alignment(snapshot: pd.DataFrame,
             ]
             raise ValueError(f"횡단면-{col} FINAL 원장 불일치: {rows}")
         max_error = max(max_error, float((left - right).abs().max()))
+    offenders = []
+    for t in snap.index:
+        derived = _derived_group(annual.loc[t])
+        expected = str(snap.loc[t, "expected_group"]).strip()
+        if derived != expected and t not in ALIGNMENT_GROUP_EXCEPTIONS:
+            offenders.append(f"{t}:단면={expected}!=원장유도={derived}")
+    if offenders:
+        raise ValueError(
+            f"횡단면-판정군 FINAL 원장 불일치(미등록 예외): {offenders}")
     return max_error
 
 

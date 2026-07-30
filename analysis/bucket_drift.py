@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""
+# 이 docstring 은 raw 문자열이어야 한다. 아래 분해 도식이 백슬래시를 쓰는데,
+# 일반 문자열이면 Python 3.12+ 가 "invalid escape sequence '\_'" SyntaxWarning
+# 을 내고, 그 경고가 확정 실행 로그(out/f4c_bucket_log.txt)에 그대로 동결된다.
+r"""
 bucket_drift.py - 40/60 버킷 규정과 실제 지수의 괴리 계량
 ==========================================================
 왜 필요한가

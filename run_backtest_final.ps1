@@ -51,6 +51,15 @@ if ($NoBenchmark) { $benchArgs += "--no-benchmark" }
 python analysis\run_backtest.py --snapshots data\snapshots --prices-cache out\px.csv --policy all --require-lineage --mode pr @benchArgs --out out\backtest | Tee-Object -FilePath out\f4_backtest_log.txt
 if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 본 실행 실패 - 로그 공유" ; exit 1 }
 
+# 4b) 구성·버킷 진단 - 본 실행 산출물을 읽어 '규정 대비 실제'를 계량한다.
+#     본 실행 뒤·매니페스트 앞에 두는 이유: 산출물(out\backtest)에 CSV를 더하고,
+#     그 CSV까지 7단계 동결 커밋에 포함시키기 위해서다. 두 스크립트 모두 지수
+#     계열을 바꾸지 않는다(읽기 전용 진단) - 헤드라인 수치는 4단계가 확정한다.
+python analysis\composition_timeline.py --snapshots data\snapshots --index-level out\backtest\index_level.csv --out out\backtest | Tee-Object -FilePath out\f4b_composition_log.txt
+if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 구성 이력 산출 실패" ; exit 1 }
+python analysis\bucket_drift.py --snapshots data\snapshots --prices-cache out\px.csv --out out\backtest | Tee-Object -FilePath out\f4c_bucket_log.txt
+if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 버킷 드리프트 산출 실패 - 재현 경로가 엔진과 어긋났을 수 있음" ; exit 1 }
+
 # 5) FINAL 매니페스트 (게이트 재검증 포함)
 python analysis\make_backtest_manifest.py --final --index-asof $IndexAsof --gates data\final_run_gates.json
 if ($LASTEXITCODE -ne 0) { Write-Host "[중단] FINAL 매니페스트 생성 실패" ; exit 1 }
@@ -81,6 +90,8 @@ $releasePaths = @(
     "out\f2_snapshot_log.txt",
     "out\f3_coverage_log.txt",
     "out\f4_backtest_log.txt",
+    "out\f4b_composition_log.txt",
+    "out\f4c_bucket_log.txt",
     "docs\FACTSHEET.md"
 )
 foreach ($path in $releasePaths) {

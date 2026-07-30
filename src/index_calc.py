@@ -42,9 +42,8 @@ def load_constituents(path: str) -> pd.DataFrame:
 
     종목코드는 반드시 문자열로 읽어야 합니다 - dtype 지정을 안 하면 판다스가 숫자로 인식해서
     '005930' 같은 앞자리 0이 '5930'으로 사라집니다.
-=======
-    종목코드는 반드시 문자열로 읽어야 합니다
-    최소 컬럼: 코드, 종목명, bucket(anchor/core/satellite), weight, ff_market_cap, price
+    최소 컬럼: 코드, 종목명, bucket(anchor/core/satellite), weight, ff_market_cap
+    (종가는 이 CSV가 아니라 별도 price_panel로 받는다 - 실제 인계 CSV엔 price 컬럼 없음)
     """
     return pd.read_csv(path, dtype={"코드": str, "code": str})
 
@@ -171,9 +170,6 @@ def adjust_base_market_cap(B_t: float, M_t: float, delta_M: float) -> float:
 
 
 # ============================================================
-
-# 4. 여러 날짜에 걸친 지수 시계열 만들기 - 실제 사용 시 이 함수를 확장해서 쓰세요
-
 # 3-1. 주식교부 합병(share-swap) 처리
 # ============================================================
 # simulate_index는 "날짜별 최종 목표비중" 이벤트만 소비할 수 있고, 주식교부

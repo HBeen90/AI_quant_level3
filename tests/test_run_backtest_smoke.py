@@ -236,12 +236,26 @@ def test_capacity_real_delta_w_path_is_wired():
 def test_benchmark_config_fixes_code_and_matches_series():
     """벤치마크 지정 파일: CONFIRMED 시 코드 고정·PR/TR 계열 매칭·공란 fail-closed.
     미확정(PROVISIONAL) 시 이름기반 잠정으로 떨어진다."""
-    # 동봉 템플릿은 PROVISIONAL 이어야 한다(위원회 미확정 상태로 출하)
+    # 동봉 지정 파일은 두 상태 중 하나여야 하고, 어느 쪽이든 **자기일관적**이어야
+    # 한다. 과거에는 PROVISIONAL 만 허용했는데(위원회 미확정 상태로 출하한다는
+    # 전제), 2026-07-30 위원회가 KRX 반도체 PR=5044 를 확정하면서 그 전제가
+    # 끝났다. 상태를 고정으로 못 박으면 정상적인 확정이 테스트 실패로 나타난다.
+    # 막아야 할 것은 '확정 상태'가 아니라 **반쪽짜리 확정**(status 만 CONFIRMED
+    # 이고 코드·근거가 빈 채로 커밋되는 것)이므로, 그 쪽을 검사한다.
     cfg_path = os.path.join(HERE, "data", "benchmark.yaml")
     cfg = load_benchmark_config(cfg_path)
-    assert cfg is not None and str(cfg["status"]).upper() == "PROVISIONAL", \
-        "출하 템플릿은 PROVISIONAL(위원회 미확정)이어야 함"
-    assert resolve_benchmark_spec(cfg, "pr")["status"] == "provisional"
+    assert cfg is not None, "data/benchmark.yaml 이 없거나 파싱 실패"
+    status = str(cfg["status"]).upper()
+    assert status in {"PROVISIONAL", "CONFIRMED"}, f"알 수 없는 status: {status}"
+    spec = resolve_benchmark_spec(cfg, "pr")   # CONFIRMED 인데 공란이면 여기서 SystemExit
+    if status == "PROVISIONAL":
+        assert spec["status"] == "provisional"
+    else:
+        # 확정본이면 코드·표기명이 실제로 실려 있어야 한다(공란 확정 차단).
+        assert spec["status"] == "confirmed"
+        assert spec["code"] and spec["name"], f"확정본에 코드/이름이 비었다: {spec}"
+        assert str(cfg.get("effective_date", "")).strip(), "확정본에 effective_date 없음"
+        assert str(cfg.get("resolved_by", "")).strip(), "확정본에 resolved_by 없음"
 
     # CONFIRMED: 모드에 따라 PR/TR 코드 자동 선택
     conf = {"status": "CONFIRMED", "fallback_keyword": "반도체",

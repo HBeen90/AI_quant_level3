@@ -1,0 +1,86 @@
+{
+ "schema_version": 1,
+ "run_type": "FINAL_BACKTEST",
+ "index_asof": "2026-07-23",
+ "generated_at_utc": "2026-07-30T10:19:06+00:00",
+ "code_commit_snapshots": "5484c4e0384d8ada36489e2d826d1422fd129a93",
+ "code_commit_now": "5484c4e0384d8ada36489e2d826d1422fd129a93",
+ "inputs": {
+  "data/verdict_ledger.csv": "EAB08F09026AEC0D0C9B44C1F29EA7FF835A21D60CA4831824ED3961425936EC",
+  "out/px.csv": "2EB8ABD30248E65CA384CC5B5C0B32F4DA8FDA8EDBC9E979D372F6111EA5B35D",
+  "data/benchmark.yaml": "DACD017BF2C2C47B0FDAE7EF7771B025B485C5C14E2A21B2A71E23204FC8E635",
+  "data/final_run_gates.json": "593871F6199D351619389F7F946E870D2350E3BF98260B53F7783E088CAFBED3"
+ },
+ "snapshots": {
+  "snapshot_20200615.csv": "D35A2BE2528AE04008F966CAE43C4EC5F15B4E85207A21FA59AC1183EE414EF7",
+  "snapshot_20201214.csv": "4FCAA63B39E22B0335653114D4671FA7CE1DC7DBC763588463F3AEA9A7462F86",
+  "snapshot_20210614.csv": "F9A92014DE23934DB0E3DC44F7501A2A1F0123F003335005D09EAA77895002F7",
+  "snapshot_20211213.csv": "E8AF34960A87D9340A51DB89527D23BA2EF39FEA8C8136AB1ED533361EF58FD1",
+  "snapshot_20220613.csv": "6B70DA77F4059C293870CE7028C5BA3118ADB18551A2CFA00F743F3DD4A104D8",
+  "snapshot_20221212.csv": "13AA8029487C9577FCE7C461A849D7C260A1B755B6CDDE59C54C46DCC72900F2",
+  "snapshot_20230612.csv": "85FA4A334157D564DDA7026AC5C2561E96E2C135D9E8744C79E368F78D78302F",
+  "snapshot_20231218.csv": "3B0C53D393AE1281A9258C08113DA124DEAE83EC9A322F63B38E0741AAB9635A",
+  "snapshot_20240617.csv": "E38EDC955A8F08A4B0214C623D15321EC05141B2FF7C0B0B341D19E7782B8E84",
+  "snapshot_20241216.csv": "FF66257EEC506F4E99FAAA3FAB34BF0EECB25882A3183B16742635FE753735B5",
+  "snapshot_20250616.csv": "47DA87ED184CEE0DCB175A52AF5C419E1A26C946A36606124F8A4A2C61BA7FAD",
+  "snapshot_20251215.csv": "039DBE1AAC6F1F5ACE3A78D0269F10D9F5C6473D661D34BF62B6638C45D47488",
+  "snapshot_20260615.csv": "8D80A6FBC04A5D75B6A201657B39D3367E5E3A4AE9C951644A39A6B8F6F46C96"
+ },
+ "outputs": {
+  "benchmark_inference.csv": "41B0DF184EDAD9DC3B91CC2BE8DC6722D56D63C1D265349E11B2D7DF44F0C29B",
+  "buffer_binding.csv": "C5124E5163FF2EB061C9CC4AAAC658CACDC6AE460C70033B8E664B1AEEE7E50C",
+  "buffer_binding_by_policy.csv": "E6F65CDA421BE06D4D9421804BFABA4968337F4B74E3F7DD13948111E7F8632F",
+  "buffer_falsification.csv": "CE283126548C3DDD19689E9126946E181EBF946622D62CF1F4CDC4C727185023",
+  "buffer_monotonicity.csv": "797D5DA97DBC07C7D92B01334F9B7772AB6DB25BD838E5E9D1F3C3E6F07330CF",
+  "change_history.csv": "C6F0CC51563A3216DCC5E83DDD77A673C0488781A09316C35C893B3F593C9B3C",
+  "composition_dwell.csv": "CC1E77810271AC7003D599BFDD6B82BC43E261E3676CEFA7016CF8B97DBCDA2A",
+  "composition_timeline.csv": "ECEF0430D6C801BBCFCCC72974D242EDC402E5DA1E2ED755891C95AF466B5F6E",
+  "event_log.csv": "608235C0B6AD14D2C6E0C01BF818A4CB6E696641DD546A51CF48DEE2257513EE",
+  "index_level.csv": "D9ECAB32980F62464DF3A66C0577F99DE4AABEC079979760E2468D2377CD865A",
+  "policy_comparison.csv": "747385B9E977684318064999268E1C54B43B78AC255D139DF302908568CD9254",
+  "theme_relevance.csv": "4C9EC63EE2675E0510E6069A90237E435FAF5DD0EE00CED1A8FCA2B33CE6C814"
+ },
+ "gates": {
+  "d1_index_asof": {
+   "value": "2026-07-23",
+   "by": "김소연",
+   "on": "2026-07-30",
+   "_설명": "위원회가 확정한 백테스트 종료일(YYYY-MM-DD). 잠정값 2026-07-23 추인 가능.",
+   "_근거": "out/px.csv 최종 관측일 2026-07-23 · 구성종목 인계본(구성종목_인계_20260723) 과 동일 기준일. --IndexAsof 인자와 문자열이 정확히 일치해야 한다(매니페스트가 대조한다)."
+  },
+  "d2_benchmark": {
+   "value": "CONFIRMED: KRX 반도체 PR=5044 (KRX, 최초관측 2010-01-04 · 최종관측 2026-07-23 · 4,075관측 - 백테스트 구간 전체 포함). TR: 'KRX 반도체 TR' 표기가 KRX 지수 목록에 미공표(resolver 조회 0건)이므로 보조 비교 생략. 헤드라인 수익률 유형은 PR.",
+   "by": "김소연",
+   "on": "2026-07-30",
+   "_설명": "벤치마크 처리 결정 - 예: 'CONFIRMED: KRX 반도체 PR=<코드>, TR=<코드>' 또는 '이번 확정 실행에서 벤치마크 제외(사유)'. resolver 실행·회의록 기록 후 benchmark.yaml 반영.",
+   "_근거": "python analysis\\resolve_benchmark_code.py (2026-07-30, INDEX_ASOF=2026-07-23). 반도체 후보 4건 전수 - 5044 KRX 반도체 / 5422 KRX 반도체 Top 15 / 5450 KRX AI 반도체 지수 / 5453 KRX K-AI 반도체TOP2+ 지수. TR 표기 0건.",
+   "_선행": "이 value 로 서명하기 전에 data\\benchmark.yaml 의 effective_date·resolved_by 를 기입하고 status 를 CONFIRMED 로 바꿀 것. yaml 이 PROVISIONAL 인 채로 확정 실행하면 run_backtest.py 가 --require-lineage 에서 중단한다(경고 후 진행하지 않는다).",
+   "_한계": "TR 미공표로 배당 포함 비교가 불가하다. 본 지수는 PR 이고 벤치마크도 PR 이라 동일 기준 비교이지만, 'TR 대비 초과성과' 문항에는 '해당 계열이 공표되지 않아 산출 불가'로 답해야 한다."
+  },
+  "d3_admin_events": {
+   "value": "관리종목 수시편출 이벤트 0건 (KIND 0350, 2020-01-01~2026-07-30)",
+   "by": "김소연",
+   "on": "2026-07-30",
+   "_설명": "evidence/kind_admin_history_20260730 조사 결과 승인(human_signoff와 동일인·동일일 권장)."
+  },
+  "judgment_322310": {
+   "value": "B안(단면 정본 - 원장 FY2024·25 False 정정) 추인",
+   "by": "김소연",
+   "on": "2026-07-30",
+   "_설명": "원문 검사(evidence/judgment_ratification_20260730) 결과 HBM 서술 부재 확인 - B안 정정(2026-07-30) 추인. 기록: judgment_record 번복 기록·verdict_ledger_correction_20260730.md",
+   "_주의": "PROVISIONAL 매니페스트의 known_issues 1번이 이 항목이다. 추인이 기록되면 해당 이슈가 해소된다."
+  },
+  "judgment_atsemicon": {
+   "value": "전 기간 편입 자격 아님 추인",
+   "by": "김소연",
+   "on": "2026-07-30",
+   "_설명": "동 기록 판정 2 추인 (FY2019~FY2022 사업보고서 HBM 고유공정 서술 부재 확인)."
+  }
+ },
+ "environment": {
+  "python": "3.13.9",
+  "pandas": "2.3.3",
+  "pykrx": "1.2.8"
+ },
+ "citation_note": "게이트 승인 완료 - verify_claims.py 가 수치 인용을 해제한다"
+}

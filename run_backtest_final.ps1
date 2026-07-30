@@ -55,8 +55,20 @@ if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 본 실행 실패 - 로그 공�
 python analysis\make_backtest_manifest.py --final --index-asof $IndexAsof --gates data\final_run_gates.json
 if ($LASTEXITCODE -ne 0) { Write-Host "[중단] FINAL 매니페스트 생성 실패" ; exit 1 }
 
-# 6) 클레임 검증 + FACTSHEET 재생성 (수치 인용 자동 해제 확인)
-python analysis\verify_claims.py --factsheet-out docs\FACTSHEET.md
+# 6a) 전 테스트 스위트 - 클레임 검증보다 먼저, 별도 관문으로 돌린다.
+#     과거에는 6b 의 verify_claims 안에서 '전 테스트 통과' 클레임이 run_all 을
+#     호출했는데, 그 구조는 순환한다:
+#       테스트 실패 -> 클레임 FAIL -> FACTSHEET 에 [FAIL] 기록
+#       -> tests/test_claims.py 가 'FACTSHEET 에 FAIL 없음'을 검사하다 실패
+#       -> 테스트 실패 (원점)
+#     한 번 걸리면 원인을 고쳐도 스스로 풀리지 않는 덫이라, 테스트 관문을
+#     밖으로 꺼내고 FACTSHEET 는 --fast(자기참조 클레임 제외)로 만든다.
+#     tests/test_claims.py 도 그 클레임을 기대 목록에서 빼고 있다(설계 일치).
+python tests\run_all.py
+if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 테스트 스위트 실패 - 위 출력의 FAIL 파일을 먼저 고칠 것" ; exit 1 }
+
+# 6b) 클레임 검증 + FACTSHEET 재생성 (수치 인용 자동 해제 확인)
+python analysis\verify_claims.py --factsheet-out docs\FACTSHEET.md --fast
 if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 클레임 검증 실패 - 수치 공개 불가 상태" ; exit 1 }
 
 # 7) 생성 산출물만 동결 커밋

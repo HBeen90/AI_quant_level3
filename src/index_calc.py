@@ -16,7 +16,6 @@ index_calc.py — HBM 반도체 테마 지수: 구성종목 및 지수 산출 (M
         - 리밸런싱마다 구성이 바뀌어도 지수가 튀지 않게(불연속 없이) 이어붙이는 로직
         - Methodology 3.3의 손계산 예시(1000.00 -> 1015.40)와 코드 결과가 일치하는지 검증
 
-용어가 나올 때마다 쉬운 말 설명을 주석으로 붙였습니다.
 """
 
 from __future__ import annotations
@@ -35,8 +34,7 @@ BASE_INDEX_LEVEL = 1000.00   # 기준지수 — 지수의 "시작 눈금"
 # ============================================================
 def load_constituents(path: str) -> pd.DataFrame:
     """팀 공유 형식의 CSV를 읽습니다.
-    종목코드는 반드시 문자열로 읽어야 합니다 — dtype 지정을 안 하면 판다스가 숫자로 인식해서
-    '005930' 같은 앞자리 0이 '5930'으로 사라집니다.
+    종목코드는 반드시 문자열로 읽어야 합니다
     최소 컬럼: 코드, 종목명, bucket(anchor/core/satellite), weight, ff_market_cap, price
     """
     return pd.read_csv(path, dtype={"코드": str, "code": str})
@@ -107,6 +105,42 @@ def adjust_base_market_cap(B_t: float, M_t: float, delta_M: float) -> float:
         B(t+1) = B(t) x ( M(t) ± ΔM(t+1) ) / M(t)
     ΔM: 변동 주식수 x (발행가액 또는 전일종가) — 사건으로 인한 비교시가총액 변동분"""
     return B_t * (M_t + delta_M) / M_t
+
+
+# ============================================================
+# 3-1. 주식교부 합병(share-swap) 처리
+# ============================================================
+# simulate_index는 "날짜별 최종 목표비중" 이벤트만 소비할 수 있고, 주식교부
+# 합병(피합병사 편출 + 존속회사 주식수 증가)을 그 이벤트 형태로 바꿔주는 계산은
+# index_calc(제수) 영역으로 남겨져 있었다. 그 변환을 여기서 만든다.
+#
+# 핵심 아이디어: 주식교부 합병은 피합병사 주주가 존속회사 주식을 받는 거래이므로,
+# 피합병사가 갖고 있던 비중은 사라지는 게 아니라 그대로 존속회사로 넘어간다.
+# 나머지 종목 비중은 이 거래와 무관하므로 건드릴 이유가 없다. 즉:
+#   새 존속회사 비중 = 기존 존속회사 비중 + 기존 피합병사 비중
+#   나머지 종목 비중 = 그대로, 피합병사는 제외
+# 이렇게 비중을 "이동"만 시키면 합계가 항상 정확히 1.0로 유지되어 재정규화가
+# 필요 없다.
+
+def calc_current_weights(ff_mcap_at_rebal: pd.Series, iif: pd.Series,
+                          price_now: pd.Series, price_at_rebal: pd.Series) -> pd.Series:
+    """지금 이 상태(iif)로, 오늘(price_now) 시점 각 종목의 실제 비중을 역산한다.
+    (calc_market_cap_M과 같은 식이지만, 합계를 내기 전 종목별 값을 비중으로 돌려준다.
+    합병처럼 리밸런싱일이 아닌 중간 날짜에도 "지금 비중"이 필요해서 별도로 둔다.)"""
+    contribution = iif * ff_mcap_at_rebal * (price_now / price_at_rebal)
+    return contribution / contribution.sum()
+
+
+def apply_merger(weights: pd.Series, target: str, acquirer: str) -> pd.Series:
+    """주식교부 합병 발생 시 최종 목표비중을 만든다.
+    target(피합병사) 비중을 그대로 acquirer(존속회사)로 넘기고 target은 제외한다.
+    반환값은 simulate_index의 목표비중 이벤트나 이 파일의 rebalance()에 그대로
+    넣을 수 있는 형태(합계 1.0인 pd.Series)다."""
+    if target not in weights.index or acquirer not in weights.index:
+        raise ValueError(f"target({target}) 또는 acquirer({acquirer})가 현재 구성종목에 없습니다")
+    new_weights = weights.drop(target).copy()
+    new_weights[acquirer] = new_weights[acquirer] + weights[target]
+    return new_weights
 
 
 # ============================================================
@@ -205,3 +239,22 @@ if __name__ == "__main__":
     B_adjusted = adjust_base_market_cap(B, M_t, toy_delta_M)
     print(f"\n(3.4 참고) 기업행위로 ΔM={toy_delta_M:,}이 생겼다면 제수는 {B:,.0f} -> {B_adjusted:,.0f} 로 조정")
     print("이렇게 조정해야 다음날 지수가 '주가 변동'만 반영하고 '구성 변화'로는 점프하지 않습니다.")
+
+    # --- 주식교부 합병 맛보기: 심텍(피합병사) -> 하나마이크론(존속회사), 순수 예시 ---
+    target, acquirer = codes[3], codes[4]
+    level_before = formal_level  # 합병 시행일(= price_now 시점) 직전 지수
+
+    w_now = calc_current_weights(ff_mcap_at_rebal, iif, price_now, price_at_rebal)
+    w_merged = apply_merger(w_now, target=target, acquirer=acquirer)
+
+    ff_mcap_post = ff_mcap_at_rebal.drop(target).copy()
+    ff_mcap_post[acquirer] += ff_mcap_at_rebal[target]  # 존속회사가 피합병사 몫만큼 커짐(예시)
+    price_post = price_now.drop(target)                 # 합병 시행일 종가 = 새 리밸런싱 기준가
+
+    iif2, B2 = rebalance(prev_level=level_before, new_weights=w_merged, ff_mcap_at_rebal=ff_mcap_post)
+    level_after = calc_index_level(calc_market_cap_M(ff_mcap_post, iif2, price_post, price_post), B2)
+
+    print(f"\n(합병 예시) {names[3]} -> {names[4]} 합병 처리 직전 지수: {level_before:.6f}")
+    print(f"(합병 예시) 합병 반영 직후(같은 날) 지수        : {level_after:.6f}")
+    assert abs(level_before - level_after) < 1e-6, "합병 반영 전후 지수가 끊깁니다"
+    print("[확인] 합병을 반영해도 그 시점 지수는 점프하지 않습니다(연속성 유지 — target 비중이 그대로 acquirer로 이동했을 뿐).")

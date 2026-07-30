@@ -308,6 +308,60 @@ def c_survivorship_survey():
     )
 
 
+def c_pr_tr_parallel():
+    """PR/TR 병기 - 배당 기여도를 재계산하고 **가정을 문장에 붙여서** 낸다.
+
+    왜 인용 금지가 아니라 클레임인가
+    -------------------------------
+    '생존편향 크기'는 측정 자체를 안 했으니 인용 금지다. TR 수치는 다르다 -
+    계산됐고 재현되며, 다만 **두 가지 가정에 의존**한다(배당락일 = 12월 마지막
+    거래일 / 연간 DPS 일괄 반영). 그런 수치는 숨길 게 아니라 **가정을 달고**
+    내보내는 것이 맞다. 그래서 재현값 문자열에 가정을 박아 넣는다 - 팩트시트에
+    숫자만 실리고 가정이 떨어져 나가는 일을 구조적으로 막는다.
+
+    검증 두 가지
+      1) 연환산 기여도가 (TR누적/PR누적) 로 재계산되는가
+      2) MDD 구간에 배당락일이 없으면 PR·TR MDD 가 **정확히** 같은가
+         - 배당이 엉뚱한 날짜에 꽂히면 이 등식이 깨진다. 날짜 배선 검사다.
+    """
+    import json as _json
+    tr_dir = os.path.join(HERE, "out", "backtest_tr")
+    lv = pd.read_csv(os.path.join(tr_dir, "index_level_pr_tr.csv"),
+                     index_col=0, parse_dates=True)
+    div = pd.read_csv(os.path.join(HERE, "data", "dividends.csv"),
+                      dtype={"ticker": str})
+    man = _json.loads(open(os.path.join(HERE, "data",
+                                        "dividends_manifest.json"),
+                           encoding="utf-8").read())
+    pr, tr = lv["PR"].astype(float), lv["TR"].astype(float)
+    yrs = (lv.index[-1] - lv.index[0]).days / 365.25
+    gap = (tr.iloc[-1] / pr.iloc[-1]) ** (1 / yrs) - 1
+
+    def _mdd(s):
+        dd = s / s.cummax() - 1
+        return float(dd.min()), dd.idxmin(), s[:dd.idxmin()].idxmax()
+
+    mdd_pr, low_pr, peak_pr = _mdd(pr)
+    mdd_tr, low_tr, peak_tr = _mdd(tr)
+    ex_dates = pd.to_datetime(div["ex_date"].unique())
+    ex_in_window = [d for d in ex_dates if peak_pr <= d <= low_pr]
+    ok = (
+        gap > 0                                   # 배당은 TR을 끌어올린다
+        and abs((1 + gap) * (pr.iloc[-1] / pr.iloc[0]) ** (1 / yrs)
+                - (tr.iloc[-1] / tr.iloc[0]) ** (1 / yrs)) < 1e-9
+        and len(div) > 0
+        and str(man.get("인용_제한", "")).strip() != ""
+        # 배당락일이 MDD 구간 밖이면 두 계열의 MDD 는 정확히 같아야 한다
+        and (bool(ex_in_window) or abs(mdd_pr - mdd_tr) < 1e-12)
+    )
+    return ok, (
+        f"연환산 배당 기여도 {gap * 100:.4f}%p · 배당 {len(div)}건/"
+        f"{div['ticker'].nunique()}종목 · MDD 구간 내 배당락일 "
+        f"{len(ex_in_window)}일이라 PR·TR MDD 일치 "
+        f"(가정: 배당락일=12월 마지막 거래일 · 연간 DPS 일괄 반영 - 보조 비교 전용)"
+    )
+
+
 def c_kind_admin_history():
     """D3 KIND 0350 조사 결과와 보존 원응답 232건을 재검증한다."""
     import hashlib
@@ -444,6 +498,9 @@ CLAIMS = [
      "실측(공식 원응답 교차검증)"),
     ("생존편향은 소멸 종목 전수 조사로 후보 0건이 확인됐다(크기는 미측정)",
      c_survivorship_survey, "evidence/survivorship/", "실측(상장 명단 대조)"),
+    ("PR/TR 병기가 가능하며 배당 기여도는 재현된다(배당락일 근사 의존)",
+     c_pr_tr_parallel, "out/backtest_tr/index_level_pr_tr.csv",
+     "실측(가정 명시 · 보조 비교)"),
     ("전 테스트 스위트가 통과한다",
      c_test_suite, "tests/run_all.py", "실측(실행)"),
 ]

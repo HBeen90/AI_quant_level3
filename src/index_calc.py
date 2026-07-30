@@ -3,7 +3,7 @@
 index_calc.py - HBM 반도체 테마 지수: 구성종목 및 지수 산출 (Methodology Book 3장)
 ====================================================================
 담당 범위: 3.1 최종 구성종목(입력값으로 받음) · 3.2 지수 산출식 · 3.3 산출 예시(검증) ·
-           3.4 기준시가총액(제수) 수정
+           3.4 기준시가총액(제수) 수정 · 주식교부 합병(share-swap) 처리
 
 이 파일이 "받는" 것과 "하는" 것
     받는 것 (다른 파트 담당자가 만들어 넘겨주는 값 - 2장 로직은 여기서 다시 만들 필요 없음)
@@ -17,6 +17,8 @@ index_calc.py - HBM 반도체 테마 지수: 구성종목 및 지수 산출 (Met
     하는 것 (이 파일의 역할)
         - 위 입력을 받아 실제 "지수 숫자(포인트)"를 계산
         - 리밸런싱마다 구성이 바뀌어도 지수가 튀지 않게(불연속 없이) 이어붙이는 로직
+        - 주식교부 합병(피합병사 편출 + 존속회사 주식수 증가)을 최종 목표비중
+          이벤트로 변환 ― simulate_index(소연)가 그대로 소비할 수 있는 형태
         - Methodology 3.3의 손계산 예시(1000.00 -> 1015.40)와 코드 결과가 일치하는지 검증
 
 """
@@ -40,10 +42,25 @@ def load_constituents(path: str) -> pd.DataFrame:
 
     종목코드는 반드시 문자열로 읽어야 합니다 - dtype 지정을 안 하면 판다스가 숫자로 인식해서
     '005930' 같은 앞자리 0이 '5930'으로 사라집니다.
-
-    최소 컬럼: 코드, 종목명, bucket(anchor/core/satellite), weight, ff_market_cap, price
+    최소 컬럼: 코드, 종목명, bucket(anchor/core/satellite), weight, ff_market_cap
+    (종가는 이 CSV가 아니라 별도 price_panel로 받는다 - 실제 인계 CSV엔 price 컬럼 없음)
     """
     return pd.read_csv(path, dtype={"코드": str, "code": str})
+
+
+# ============================================================
+# 종목 구성 일치 확인 (방어용)
+# ============================================================
+# 아래 함수들은 종목별 Series 여러 개를 곱하거나 나누는데, 그중 하나에서라도
+# 종목이 하나 빠져있으면(예: 편출된 종목을 실수로 price_now에서만 안 지움)
+# 판다스가 에러 없이 그 종목을 NaN 처리하고, sum()이 NaN을 조용히 0 취급해서
+# "그럴듯하지만 틀린" 숫자가 나온다. 이를 막기 위해 계산 전에 종목 구성이
+# 정확히 같은지 확인한다.
+
+def _require_same_tickers(*series: pd.Series) -> None:
+    tickers = [set(s.index) for s in series]
+    if any(t != tickers[0] for t in tickers):
+        raise ValueError(f"입력 Series들의 종목 구성이 서로 다릅니다: {[sorted(t) for t in tickers]}")
 
 
 # ============================================================
@@ -62,6 +79,7 @@ def load_constituents(path: str) -> pd.DataFrame:
 def calc_iif(target_weights: pd.Series, ff_mcap_at_rebal: pd.Series) -> pd.Series:
     """target_weights: 종목별 목표 비중 (합계 1.0)
     ff_mcap_at_rebal: 리밸런싱일 기준 종목별 유동시가총액"""
+    _require_same_tickers(target_weights, ff_mcap_at_rebal)
     total_raw = ff_mcap_at_rebal.sum()
     return target_weights * total_raw / ff_mcap_at_rebal
 
@@ -77,6 +95,7 @@ def calc_market_cap_M(ff_mcap_at_rebal: pd.Series, iif: pd.Series,
                        price_now: pd.Series, price_at_rebal: pd.Series) -> float:
     """오늘(price_now)과 리밸런싱일(price_at_rebal) 종가의 비율만큼만 반영해서
     비교시가총액 M(t)를 구합니다. (유동시총·주식수·IIF는 리밸런싱일 값으로 고정)"""
+    _require_same_tickers(ff_mcap_at_rebal, iif, price_now, price_at_rebal)
     price_ratio = price_now / price_at_rebal
     return float((iif * ff_mcap_at_rebal * price_ratio).sum())
 
@@ -132,13 +151,13 @@ def adjust_divisor_for_dividend(B_t: float, M_ex: float,
     시가총액으로 둔 표기다. M_pre = M_ex + D 를 대입하면 위 식과 같다.
     엔진은 배당락일 종가만 갖고 있으므로 M_ex 기준을 채택한다.
     """
-    denom = M_ex + dividend_M
-    if denom <= 0:
-        raise ValueError(f"배당 보정 분모 비양수: M_ex={M_ex}, D={dividend_M}")
     if dividend_M < 0:
         raise ValueError("dividend_M 은 양수여야 한다(배당 총액). "
                          "자본환급·특별배당은 3.4 제수 조정 경로로 처리할 것 - "
                          "여기에 넣으면 이중반영이 된다.")
+    denom = M_ex + dividend_M
+    if denom <= 0:
+        raise ValueError(f"배당 보정 분모 비양수: M_ex={M_ex}, D={dividend_M}")
     return B_t * M_ex / denom
 
 
@@ -170,6 +189,7 @@ def calc_current_weights(ff_mcap_at_rebal: pd.Series, iif: pd.Series,
     """지금 이 상태(iif)로, 오늘(price_now) 시점 각 종목의 실제 비중을 역산한다.
     (calc_market_cap_M과 같은 식이지만, 합계를 내기 전 종목별 값을 비중으로 돌려준다.
     합병처럼 리밸런싱일이 아닌 중간 날짜에도 "지금 비중"이 필요해서 별도로 둔다.)"""
+    _require_same_tickers(ff_mcap_at_rebal, iif, price_now, price_at_rebal)
     contribution = iif * ff_mcap_at_rebal * (price_now / price_at_rebal)
     return contribution / contribution.sum()
 
@@ -179,6 +199,8 @@ def apply_merger(weights: pd.Series, target: str, acquirer: str) -> pd.Series:
     target(피합병사) 비중을 그대로 acquirer(존속회사)로 넘기고 target은 제외한다.
     반환값은 simulate_index의 목표비중 이벤트나 이 파일의 rebalance()에 그대로
     넣을 수 있는 형태(합계 1.0인 pd.Series)다."""
+    if target == acquirer:
+        raise ValueError(f"target과 acquirer가 같습니다({target}) ― 합병이 성립하지 않습니다")
     if target not in weights.index or acquirer not in weights.index:
         raise ValueError(f"target({target}) 또는 acquirer({acquirer})가 현재 구성종목에 없습니다")
     new_weights = weights.drop(target).copy()
@@ -258,8 +280,14 @@ def build_index_series(price_panel: pd.DataFrame,
         · exclusion    : {"tickers": [코드, ...]}
                          ΔM 을 엔진이 계산한다(편출 종목의 당일 기여분, 음수).
                          대체 편입은 하지 않는다 - 무대체 원칙.
-        · share_change : {"delta_M": float}
+        · share_change : {"ticker": 코드, "delta_M": float}
                          유상증자·주식교부 합병 등. 호출자가 ΔM 을 준다.
+                         제수(B)만 조정하고 해당 종목의 유동시총 기준을 그대로
+                         두면, 다음날부터 M(t) 계산이 옛 크기로 되돌아가서
+                         "가격 변화 없이 지수가 영구적으로 어긋나는" 왜곡이
+                         생긴다. 그래서 ticker의 ff·기준가(p0)도 오늘 시점
+                         기준으로 함께 재설정한다 - 그래야 내일부터 그 종목의
+                         기여분이 새 크기 기준으로 계속 이어진다.
         · dividend     : {"dps": pd.Series}  ← TR 계열 전용
                          배당락일 주당 배당금. 엔진이 M 단위로 환산해
                          adjust_divisor_for_dividend 로 제수를 보정한다.
@@ -281,6 +309,16 @@ def build_index_series(price_panel: pd.DataFrame,
     start = pd.Timestamp(recon[0]["date"])
     dates = price_panel.index[price_panel.index >= start]
     recon_by_date = {pd.Timestamp(e["date"]): e for e in recon}
+
+    # 이벤트 날짜가 price_panel의 실제 거래일과 하나라도 안 맞으면(공휴일·주말
+    # 착오, 날짜 포맷 실수 등) 그 이벤트는 for d in dates 루프에서 영영 안
+    # 걸리고 조용히 무시된다 - members가 끝까지 비어서 level=1000, n_members=0
+    # 껍데기 결과가 에러 없이 나올 수 있다. 미리 막는다.
+    all_event_dates = list(recon_by_date) + list(adhoc)
+    missing = sorted({d.date() for d in all_event_dates if d not in price_panel.index})
+    if missing:
+        raise ValueError(f"이벤트 날짜가 price_panel 거래일에 없습니다(공휴일/주말 "
+                         f"착오 등 확인): {missing}")
 
     rows: list = []
     level = BASE_INDEX_LEVEL
@@ -336,7 +374,24 @@ def build_index_series(price_panel: pd.DataFrame,
                 members = [t for t in members if t not in gone]
                 tag = (tag + "+exclusion").strip("+")
             elif e["kind"] == "share_change":
-                B = adjust_base_market_cap(B, M, float(e["delta_M"]))
+                ticker = e["ticker"]
+                if ticker not in members:
+                    raise ValueError(f"{d.date()} share_change 대상 종목"
+                                     f"({ticker})이 현재 구성에 없습니다")
+                delta_M = float(e["delta_M"])
+                old_contrib = float(iif[ticker] * ff[ticker]
+                                    * px_now[ticker] / p0[ticker])
+                new_contrib = old_contrib + delta_M
+                if new_contrib <= 0:
+                    raise ValueError(f"{d.date()} share_change 결과 {ticker} "
+                                     f"기여분이 비양수({new_contrib})")
+                B = adjust_base_market_cap(B, M, delta_M)
+                # 오늘을 새 기준일로 재설정 - 그래야 다음날부터 이 종목의
+                # 기여분이 new_contrib에서 가격 변화만큼만 움직인다.
+                ff = ff.copy()
+                p0 = p0.copy()
+                ff[ticker] = new_contrib / iif[ticker]
+                p0[ticker] = px_now[ticker]
                 tag = (tag + "+share_change").strip("+")
             elif e["kind"] == "dividend":                # TR 계열
                 raw_dps = e["dps"].reindex(members)

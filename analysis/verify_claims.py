@@ -458,6 +458,44 @@ def _git_head():
         return None
 
 
+#: FINAL 이후에도 바뀌면 안 되는 코드 경로. run_backtest_final.ps1 의 7단계
+#: 동결 커밋은 산출물(data/snapshots · out/ · docs/FACTSHEET.md)만 stage 하므로
+#: 이 목록과 겹치지 않는다.
+_CODE_PATHS = ("src", "analysis", "backtest", "tests", "app.py",
+               "run_backtest_final.ps1", "requirements.txt")
+
+
+def _code_changed_between(a: str, b: str) -> bool:
+    """두 커밋 사이에 코드가 바뀌었는가. 확인 불가면 '바뀐 것'으로 본다(fail-closed).
+
+    왜 커밋 동일성이 아니라 코드 차이를 보는가
+    -----------------------------------------
+    과거에는 매니페스트의 커밋이 현재 HEAD 와 **정확히 같을 것**을 요구했다.
+    그런데 확정 실행의 마지막 단계가 산출물을 동결 커밋하므로, 성공한 실행은
+    자기 손으로 HEAD 를 옮겨 방금 만든 FINAL 매니페스트를 무효로 만든다.
+    수치가 풀린 상태가 단 한 순간(동결 커밋 직전)에만 존재하는 셈이라, 그 뒤
+    누가 검증하든 항상 '잠정'으로 돌아가 있다.
+
+    막으려던 것은 '커밋이 다른 것'이 아니라 **산출 이후 코드가 바뀌는 것**이다.
+    그래서 그 쪽을 직접 검사한다 - 산출물만 담은 동결 커밋은 통과하고, 코드가
+    한 줄이라도 바뀌면 FINAL 이 무효가 된다. 데이터 무결성은 기존의 입력·
+    스냅샷·산출물 해시 대조가 그대로 담당하므로 약해지지 않는다.
+    """
+    if not a or not b:
+        return True
+    if a == b:
+        return False
+    try:
+        r = subprocess.run(["git", "diff", "--name-only", a, b, "--",
+                            *_CODE_PATHS],
+                           cwd=HERE, capture_output=True, text=True, timeout=20)
+    except Exception:
+        return True
+    if r.returncode != 0:                    # 알 수 없는 커밋·저장소 아님 등
+        return True
+    return bool(r.stdout.strip())
+
+
 def _final_manifest_valid(m) -> bool:
     """FINAL 매니페스트의 게이트·해시가 현재 파일과 전부 일치해야 해제된다.
 
@@ -481,8 +519,11 @@ def _final_manifest_valid(m) -> bool:
         return False
     snapshot_commit = str(m.get("code_commit_snapshots") or "").strip()
     manifest_commit = str(m.get("code_commit_now") or "").strip()
-    if not snapshot_commit or snapshot_commit != manifest_commit \
-            or manifest_commit != _git_head():
+    if not snapshot_commit or snapshot_commit != manifest_commit:
+        return False
+    # HEAD 와의 관계는 '같은 커밋인가'가 아니라 '그 뒤 코드가 바뀌었는가'로 본다.
+    # (7단계 동결 커밋이 스스로를 무효화하던 문제 - _code_changed_between 참조)
+    if _code_changed_between(manifest_commit, _git_head()):
         return False
     try:
         outputs = m.get("outputs") or {}

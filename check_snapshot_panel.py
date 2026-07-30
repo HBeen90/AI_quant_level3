@@ -7,7 +7,7 @@
 -----------
 1. 스냅샷 목록 · 선정기준일 · 종목수 · eligible 수
 2. 종목별 exposure / mem_ratio 가 시점마다 실제로 변하는지
-3. 군(group) 전이 횟수 — 편출입 압력의 직접 측정치
+3. 군(group) 전이 횟수 ― 편출입 압력의 직접 측정치
 4. 버퍼 임계값 교차 횟수 (핵심 30/27, 위성 70/67)
    -> 실측 경로에 버퍼 민감도를 논할 만한 교차가 있는지 판단
 
@@ -147,7 +147,7 @@ def main() -> int:
 
     dates_sorted = sorted(panel)
     if len(dates_sorted) < 2:
-        print("\n시점이 2개 미만이다 — 패널 검사를 할 수 없다.")
+        print("\n시점이 2개 미만이다 ― 패널 검사를 할 수 없다.")
         return 1
 
     print(f"\n  총 {len(dates_sorted)}개 시점: {dates_sorted[0]} ~ {dates_sorted[-1]}")
@@ -175,7 +175,7 @@ def main() -> int:
 
     for label, key in (("exposure", "exposure"), ("mem_ratio", "mem")):
         if not cols.get(key):
-            print(f"  '{label}' 열이 없다 — 건너뜀")
+            print(f"  '{label}' 열이 없다 ― 건너뜀")
             continue
         varying, total, constant = variation(label, key)
         if total == 0:
@@ -183,7 +183,7 @@ def main() -> int:
             continue
         share = varying / total
         verdict = "실측 시계열" if share >= 0.5 else (
-            "일부만 갱신" if varying else "전 시점 동일 — 형식만 시점화"
+            "일부만 갱신" if varying else "전 시점 동일 ― 형식만 시점화"
         )
         print(f"  '{label}': {total}종목 중 {varying}종목 변동 "
               f"({share:.0%})  ->  {verdict}")
@@ -244,13 +244,13 @@ def main() -> int:
     # ------------------------------------------------ 4. 임계값 교차
     print()
     print("=" * 70)
-    print("4. 버퍼 임계값 교차 — 민감도 분석 가능성 판단")
+    print("4. 버퍼 임계값 교차 ― 민감도 분석 가능성 판단")
     print("=" * 70)
 
     def crossings(col_key: str, new_th: float, hold_th: float, label: str) -> None:
         col = cols.get(col_key)
         if not col:
-            print(f"  '{label}': 열이 없다 — 건너뜀")
+            print(f"  '{label}': 열이 없다 ― 건너뜀")
             return
         series: dict[str, list[float]] = defaultdict(list)
         for date in dates_sorted:

@@ -187,7 +187,7 @@ def apply_merger(weights: pd.Series, target: str, acquirer: str) -> pd.Series:
 
 
 # ============================================================
-# 4. 여러 날짜에 걸친 지수 시계열 만들기 — 실제 사용 시 이 함수를 확장해서 쓰세요
+# 4. 여러 날짜에 걸친 지수 시계열 만들기 ― 실제 사용 시 이 함수를 확장해서 쓰세요
 
 # ============================================================
 def build_daily_series(price_panel: pd.DataFrame, reconstitution_events: list[dict]) -> pd.Series:
@@ -443,4 +443,4 @@ if __name__ == "__main__":
     print(f"\n(합병 예시) {names[3]} -> {names[4]} 합병 처리 직전 지수: {level_before:.6f}")
     print(f"(합병 예시) 합병 반영 직후(같은 날) 지수        : {level_after:.6f}")
     assert abs(level_before - level_after) < 1e-6, "합병 반영 전후 지수가 끊깁니다"
-    print("[확인] 합병을 반영해도 그 시점 지수는 점프하지 않습니다(연속성 유지 — target 비중이 그대로 acquirer로 이동했을 뿐).")
+    print("[확인] 합병을 반영해도 그 시점 지수는 점프하지 않습니다(연속성 유지 ― target 비중이 그대로 acquirer로 이동했을 뿐).")

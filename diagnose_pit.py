@@ -201,17 +201,17 @@ def analyze_panel(profile: CsvProfile, root: Path, max_rows: int) -> list[str]:
             notes.append(
                 f"  [!] '{col}' 은 {n_dates}개 시점에 걸쳐 종목별 값이 "
                 f"전혀 변하지 않는다 ({total}종목 전부 단일값) "
-                f"— 형식만 시점화된 것으로 의심"
+                f"― 형식만 시점화된 것으로 의심"
             )
         elif share < 0.5:
             notes.append(
                 f"  [~] '{col}' 은 {total}종목 중 {varying}종목만 시점별로 변한다 "
-                f"({share:.0%}) — 일부만 갱신된 상태일 수 있다"
+                f"({share:.0%}) ― 일부만 갱신된 상태일 수 있다"
             )
         else:
             notes.append(
                 f"  [OK] '{col}' 은 {total}종목 중 {varying}종목이 시점별로 변한다 "
-                f"({share:.0%}) — 실제 시계열로 보인다"
+                f"({share:.0%}) ― 실제 시계열로 보인다"
             )
     return notes
 
@@ -280,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"   열: {', '.join(profile.header)}")
 
     # ---------------------------------------------------- 2. 심사시점 축
-    hr("2. 심사시점(as-of) 축 — 결정적 검사")
+    hr("2. 심사시점(as-of) 축 ― 결정적 검사")
     panel_files: list[CsvProfile] = []
     for profile in profiles:
         if profile.error or not profile.header:

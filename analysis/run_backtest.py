@@ -69,7 +69,9 @@ from backtest.backtest import (  # noqa: E402
     annual_turnover, benchmark_inference, build_event_schedule,
     cost_sensitivity, simulate_index, summary, turnover_by_reason,
 )
-from src.rebalance import BUFFER_POLICIES, ConfigV2, validate_snapshot  # noqa: E402
+from src.rebalance import (  # noqa: E402
+    BUFFER_POLICIES, ConfigV2, buffer_binding, validate_snapshot,
+)
 
 LINEAGE = ["selection_date", "ff_market_cap_asof", "ff_market_cap_source",
            "free_float_asof", "code_commit"]
@@ -558,6 +560,7 @@ def run_one(px: pd.DataFrame, snaps: dict, adhoc: dict, cfg: ConfigV2,
     relevance = theme_relevance_history(events, snaps)
     res = {"cfg": cfg, "events": events, "hist": hist, "bt": bt, "mode": mode,
            "theme_relevance": relevance,
+           "buffer_binding": buffer_binding_history(events, snaps, cfg),
            "summary": summary(bt, bench), "by_reason": turnover_by_reason(bt),
            "cost": cost_sensitivity(bt), "annual_turnover": annual_turnover(bt)}
     if bench is not None:
@@ -566,6 +569,37 @@ def run_one(px: pd.DataFrame, snaps: dict, adhoc: dict, cfg: ConfigV2,
         except ValueError as e:
             print(f"[주의] 벤치마크 추론 생략: {e}")
     return res
+
+
+def buffer_binding_history(events: list, snapshots: dict,
+                           cfg: ConfigV2) -> pd.DataFrame:
+    """정기변경 시점별 **버퍼 발동 건수**. 정책 비교표의 해석 근거가 된다.
+
+    '네 정책이 같은 숫자를 낸다'는 결과는 그 자체로는 버그와 구분되지 않는다.
+    발동 건수를 같이 실으면 구분된다 - 발동 0건이면 동일 결과가 **정상**이고,
+    발동이 있는데도 동일하면 그때는 버그를 의심해야 한다. 표만 내고 끝내지
+    않는 이유이며, 발표에서 "버퍼를 왜 뒀나"에 답하는 자료이기도 하다.
+
+    prev_members 는 직전 이벤트(정기·수시 무관)의 구성으로 잡는다 - 수시편출로
+    빠진 종목은 그 다음 정기변경의 '기존 종목'이 아니기 때문이다.
+    """
+    rows = []
+    snaps = {pd.Timestamp(k): v for k, v in snapshots.items()}
+    prev: set = set()
+    for event in sorted(events, key=lambda e: e["effective_date"]):
+        d = pd.Timestamp(event["effective_date"])
+        if event["reason"] == "regular" and d in snaps:
+            b = buffer_binding(snaps[d], prev, cfg)
+            bind = b[b["binding"]] if len(b) else b
+            rows.append({
+                "effective_date": d,
+                "기존 비앵커 수": int(len(b)),
+                "버퍼발동 건수": int(len(bind)),
+                "버퍼발동 종목": ",".join(bind["ticker"].tolist()),
+                "버퍼구간 관측": int(b["in_band"].sum()) if len(b) else 0,
+            })
+        prev = set(event["target_weights"].index)
+    return pd.DataFrame(rows)
 
 
 def theme_relevance_history(events: list, snapshots: dict,
@@ -622,10 +656,16 @@ def policy_table(results: dict) -> pd.DataFrame:
 
     패시브 배점 원칙 유지: CAGR로 정책을 고르지 않는다. 회전율·편출입 횟수·
     평균 종목 수·비용 차감 성과를 같이 본다(데이터 스누핑 방지).
+
+    '버퍼발동' 열은 해석 장치다. 이 열이 전부 0이면 네 행이 같은 것이 정상이고
+    (표본 안에서 유지 임계값이 판정에 개입할 기회가 없었다는 뜻), 0이 아닌데도
+    행이 같으면 그때는 배선을 의심해야 한다. 열 없이 표만 내면 두 경우가
+    구분되지 않아 '정책이 코드에 안 붙은 것 아니냐'는 반론을 못 막는다.
     """
     rows = {}
     for name, r in results.items():
         s = r["summary"]
+        bb = r.get("buffer_binding")
         added = dropped = 0
         prev: set | None = None
         n_by_date: dict = {}
@@ -643,6 +683,8 @@ def policy_table(results: dict) -> pd.DataFrame:
             "유지선(핵심/위성)": f"{r['cfg'].hold_core:.2f}/{r['cfg'].hold_sat:.2f}",
             "연율화회전율(편도)": s["연율화회전율(편도)"],
             "편입 건수": added, "편출 건수": dropped,
+            "버퍼발동 건수": int(bb["버퍼발동 건수"].sum())
+            if bb is not None and len(bb) else 0,
             "평균 종목수": float(n_daily.mean()),
             "최저 테마적합도": float(relevance["score"].min())
             if len(relevance) else np.nan,
@@ -785,12 +827,37 @@ def main() -> int:
     print(f"\n[회전율 분해]\n{r['by_reason'].round(4).to_string()}")
     print(f"\n[연도별 회전율]\n{r['annual_turnover'].round(4).to_string()}")
     print(f"\n[거래비용 민감도]\n{r['cost'].round(4).to_string()}")
+    # round(4)를 프레임 전체에 걸면 effective_date(datetime)에서 UserWarning이
+    # 나 확정 실행 로그를 오염시킨다 - 숫자 열만 골라 반올림한다.
     print(f"\n[비앵커 테마 적합도 모니터링]\n"
-          f"{r['theme_relevance'].round(4).to_string(index=False)}")
+          f"{r['theme_relevance'].round({'score': 4, 'alert_line': 4}).to_string(index=False)}")
     if "inference" in r:
         print(f"\n[벤치마크 대비 추론]\n{r['inference'].to_string()}")
         r["inference"].to_frame("value").to_csv(
             os.path.join(a.out, "benchmark_inference.csv"), encoding="utf-8-sig")
+
+    bb_all = []
+    for nm, res_nm in results.items():
+        b = res_nm.get("buffer_binding")
+        if b is not None and len(b):
+            b = b.copy()
+            b.insert(0, "정책", nm)
+            b.insert(1, "유지선", f"{res_nm['cfg'].hold_core:.2f}/"
+                                 f"{res_nm['cfg'].hold_sat:.2f}")
+            bb_all.append(b)
+    if bb_all:
+        bb_tbl = pd.concat(bb_all, ignore_index=True)
+        bb_tbl.to_csv(os.path.join(a.out, "buffer_binding.csv"),
+                      index=False, encoding="utf-8-sig")
+        tot = int(bb_tbl["버퍼발동 건수"].sum())
+        print(f"\n[버퍼 발동 진단] 전 정책·전 시점 합계 발동 {tot}건")
+        if tot == 0:
+            print("  -> 표본 안에서 유지 임계값이 판정에 개입한 적이 없습니다. "
+                  "정책 4안이 같은 수치를 내는 것은 배선 오류가 아니라 이 사실의"
+                  "\n     결과입니다. 버퍼의 근거는 실측이 아니라 합성 민감도"
+                  " (analysis/sensitivity_v2.py)이며, 발표에서 그렇게 말해야 합니다.")
+        else:
+            print(bb_tbl[bb_tbl["버퍼발동 건수"] > 0].to_string(index=False))
 
     if len(results) > 1:
         tbl = policy_table(results)
@@ -799,10 +866,13 @@ def main() -> int:
                    encoding="utf-8-sig")
         print("\n선택 기준(패시브 배점): 회전율·편출입 횟수·평균 종목수·비용 차감"
               " 성과를 함께 본다. CAGR 단독으로 고르지 않는다(데이터 스누핑).")
+        if "버퍼발동 건수" in tbl.columns and int(tbl["버퍼발동 건수"].sum()) == 0:
+            print("주의: 버퍼발동 0건 - 이 표의 정책 간 '차이 없음'은 표본의 성질이지"
+                  "\n      정책이 무의미하다는 뜻도, 코드가 정책을 무시한다는 뜻도 아니다.")
 
     print(f"\n저장: {a.out}/  (index_level.csv · change_history.csv · "
           "event_log.csv · theme_relevance.csv · coverage_report.csv · "
-          "policy_comparison.csv)")
+          "policy_comparison.csv · buffer_binding.csv)")
     if a.mode == "pr":
         print("주의: 가격은 PR 계약(배당 미반영 수정주가)이다. TR 병기는 "
               "--mode both --dividends <배당CSV> (제6조).")

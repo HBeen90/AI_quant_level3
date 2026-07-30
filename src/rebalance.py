@@ -29,6 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import warnings
 
+import numpy as np
 import pandas as pd
 
 ANCHOR, CORE, SAT = "anchor", "core", "satellite"
@@ -155,7 +156,66 @@ def select_v2(candidates: pd.DataFrame, prev_members: set,
         .sort_values("ticker").reset_index(drop=True)
     new = set(members["ticker"])
     return {"members": members, "added": new - prev_members,
-            "dropped": prev_members - new, "n": len(members)}
+            "dropped": prev_members - new, "n": len(members),
+            "buffer_binding": buffer_binding(c, prev_members, cfg)}
+
+
+# ----------------------------------------------------------------------
+# 버퍼 발동 진단 - '유지 임계값이 실제로 일을 했는가'를 계량한다
+# ----------------------------------------------------------------------
+def buffer_binding(candidates: pd.DataFrame, prev_members: set,
+                   cfg: ConfigV2 = ConfigV2()) -> pd.DataFrame:
+    """유지 임계값(버퍼) **덕분에** 편출을 면한 기존 종목을 식별한다.
+
+    왜 필요한가
+    -----------
+    정책 비교표(none/narrow/mid/wide)가 네 행 모두 같은 숫자를 내면 두 가지
+    해석이 가능하다 - (a) 코드가 정책을 안 읽는 버그, (b) 표본 안에서 버퍼가
+    한 번도 발동하지 않은 정상 동작. 표만 봐서는 구분되지 않는다.
+    이 함수는 발동 건수를 **직접 세어** 둘을 갈라준다. 발동 0건이 명시되면
+    "동일 결과"는 버그가 아니라 표본의 성질이라는 증거가 된다.
+
+    판정
+    ----
+    기존 종목(prev_members) 중 비앵커만 대상. 앵커는 규칙0(유형·양산)으로
+    판정하므로 임계값과 무관하다.
+        핵심: value = exposure,  entry = entry_core,  hold = hold_core
+        위성: value = mem_ratio, entry = entry_sat,   hold = hold_sat
+        binding = (value < entry) AND (value >= hold)
+    즉 '신규였다면 못 들어왔을 값인데 기존이라 남았다'는 관측만 True.
+
+    반환 컬럼: ticker · name · group · metric · value · entry_th · hold_th ·
+              binding · in_band(정책 무관하게 버퍼가 물릴 수 있는 값의 존재)
+    hold == entry 인 정책('none')에서는 binding 이 항상 False다(버퍼 없음).
+    """
+    c = candidates.copy()
+    if "eligible" in c.columns:
+        c = c[c["eligible"].astype(bool)]          # 하드 탈락은 버퍼가 못 구한다
+    c = c[c["ticker"].isin(prev_members) & c["group"].isin([CORE, SAT])]
+    if c.empty:
+        return pd.DataFrame(columns=["ticker", "name", "group", "metric",
+                                     "value", "entry_th", "hold_th",
+                                     "binding", "in_band"])
+    is_core = c["group"] == CORE
+    value = pd.to_numeric(c["exposure"], errors="coerce").where(
+        is_core, pd.to_numeric(c["mem_ratio"], errors="coerce"))
+    entry = pd.Series(cfg.entry_sat, index=c.index).mask(is_core, cfg.entry_core)
+    hold = pd.Series(cfg.hold_sat, index=c.index).mask(is_core, cfg.hold_core)
+    # in_band 는 '정책 최대폭(wide)'이 아니라 현재 cfg 기준 - 정책별 비교가 목적.
+    out = pd.DataFrame({
+        "ticker": c["ticker"].to_numpy(),
+        "name": c["name"].to_numpy() if "name" in c.columns else "",
+        "group": c["group"].to_numpy(),
+        "metric": np.where(is_core.to_numpy(), "exposure", "mem_ratio"),
+        "value": value.to_numpy(dtype=float),
+        "entry_th": entry.to_numpy(dtype=float),
+        "hold_th": hold.to_numpy(dtype=float),
+    })
+    out["binding"] = ((out["value"] < out["entry_th"] - 1e-12)
+                      & (out["value"] >= out["hold_th"] - 1e-12))
+    out["in_band"] = out["value"].between(
+        out["hold_th"] - 1e-12, out["entry_th"] - 1e-12)
+    return out.sort_values("ticker").reset_index(drop=True)
 
 
 # ----------------------------------------------------------------------

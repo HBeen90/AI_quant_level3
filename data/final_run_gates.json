@@ -1,0 +1,44 @@
+{
+  "_안내": "확정(FINAL) 백테스트 게이트 - 작성본. value 는 근거 자료에 맞춰 채워 뒀고, by/on 은 비워 뒀다. 이 두 칸은 사람이 책임을 지는 칸이라 대신 채우면 게이트가 하는 일이 사라진다. 승인자 이름과 승인일(YYYY-MM-DD)을 직접 적은 뒤 run_backtest_final.ps1 을 실행할 것. 하나라도 공란이면 FINAL 매니페스트가 생성되지 않는다(fail-closed).",
+  "_실행": "powershell -ExecutionPolicy Bypass -File .\\run_backtest_final.ps1 -IndexAsof 2026-07-23 -NoBenchmark   ※ -NoBenchmark 는 아래 d2 를 '제외' 결정으로 확정한 경우에만. 벤치마크를 포함하려면 먼저 resolve_benchmark_code.py 를 돌려 benchmark.yaml 을 CONFIRMED 로 바꾸고 d2 value 를 교체한 뒤 스위치 없이 실행한다.",
+  "_선행": "게이트·코드 변경은 먼저 커밋해야 한다. run_backtest_final.ps1 은 git status 가 깨끗하지 않으면 중단한다(산출물과 코드 상태를 1:1로 묶기 위한 설계).",
+
+  "d1_index_asof": {
+    "value": "2026-07-23",
+    "by": "",
+    "on": "",
+    "_설명": "위원회가 확정한 백테스트 종료일(YYYY-MM-DD). 잠정값 2026-07-23 추인 가능.",
+    "_근거": "out/px.csv 최종 관측일 2026-07-23 · 구성종목 인계본(구성종목_인계_20260723) 과 동일 기준일. --IndexAsof 인자와 문자열이 정확히 일치해야 한다(매니페스트가 대조한다)."
+  },
+
+  "d2_benchmark": {
+    "value": "이번 확정 실행에서 벤치마크 제외 - benchmark.yaml status=PROVISIONAL, primary.pr_code/tr_code 미기입 상태로 추종오차·정보비율 산출 불가. 코드 확정 후 별도 실행으로 보완한다.",
+    "by": "",
+    "on": "",
+    "_설명": "벤치마크 처리 결정 - 예: 'CONFIRMED: KRX 반도체 PR=<코드>, TR=<코드>' 또는 '이번 확정 실행에서 벤치마크 제외(사유)'. resolver 실행·회의록 기록 후 benchmark.yaml 반영.",
+    "_주의": "제외를 택하면 벤치마크 대비 초과수익·추적오차·정보비율을 발표에서 인용할 수 없다. 파트4 예상질의 중 정보비율 유의성 문항이 여기에 걸리므로, 제외로 갈지 resolver 를 먼저 돌릴지는 발표 전에 결정할 것.",
+    "_대안": "포함하려면 (1) python analysis\\resolve_benchmark_code.py 로 PR/TR 코드·최초 관측일 확인 (2) benchmark.yaml 의 pr_code/tr_code/effective_date/resolved_by 기입 후 status: CONFIRMED (3) 이 value 를 'CONFIRMED: KRX 반도체 PR=<코드>, TR=<코드>' 로 교체 (4) -NoBenchmark 없이 실행."
+  },
+
+  "d3_admin_events": {
+    "value": "관리종목 수시편출 이벤트 0건 (KIND 0350, 2020-01-01~2026-07-30)",
+    "by": "",
+    "on": "",
+    "_설명": "evidence/kind_admin_history_20260730 조사 결과 승인(human_signoff와 동일인·동일일 권장)."
+  },
+
+  "judgment_322310": {
+    "value": "B안(단면 정본 - 원장 FY2024·25 False 정정) 추인",
+    "by": "",
+    "on": "",
+    "_설명": "원문 검사(evidence/judgment_ratification_20260730) 결과 HBM 서술 부재 확인 - B안 정정(2026-07-30) 추인. 기록: judgment_record 번복 기록·verdict_ledger_correction_20260730.md",
+    "_주의": "PROVISIONAL 매니페스트의 known_issues 1번이 이 항목이다. 추인이 기록되면 해당 이슈가 해소된다."
+  },
+
+  "judgment_atsemicon": {
+    "value": "전 기간 편입 자격 아님 추인",
+    "by": "",
+    "on": "",
+    "_설명": "동 기록 판정 2 추인 (FY2019~FY2022 사업보고서 HBM 고유공정 서술 부재 확인)."
+  }
+}

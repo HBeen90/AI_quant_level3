@@ -172,12 +172,20 @@ def main() -> int:
             print("[SKIP] --check-gates 는 --final 에서만 의미 있음")
             return 0
         try:
-            load_gates(a.gates or os.path.join(HERE, "data",
-                                               "final_run_gates.json"))
+            g = load_gates(a.gates or os.path.join(HERE, "data",
+                                                   "final_run_gates.json"))
         except ValueError as e:
             print(f"[FAIL] 게이트 미충족: {e}")
             return 1
-        print("[OK] 게이트 5건 전부 기입 확인")
+        # d1 과 --index-asof 의 불일치는 build() 에서도 잡히지만, 그때는 이미
+        # 스냅샷 재생성과 본 실행이 끝난 뒤다. 사전점검이 존재하는 이유가
+        # '돌리기 전에 막는 것'이므로 같은 대조를 여기서도 한다.
+        asof = str(g["d1_index_asof"]["value"]).strip()
+        if asof != a.index_asof:
+            print(f"[FAIL] --index-asof({a.index_asof}) 가 게이트 "
+                  f"d1_index_asof({asof}) 와 다릅니다")
+            return 1
+        print(f"[OK] 게이트 5건 전부 기입 확인 · INDEX_ASOF {asof} 일치")
         return 0
 
     try:

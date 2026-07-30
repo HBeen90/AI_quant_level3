@@ -326,18 +326,29 @@ def c_capacity_measured():
         정기변경과 월간 캡만 반영된 값이다.
     """
     import warnings as _w
+    import logging as _log
     from analysis.capacity_v2 import real_capacity
     import json as _json
 
     adv_csv = os.path.join(HERE, "data", "adv60.csv")
     man = _json.loads(open(os.path.join(HERE, "data", "adv60_manifest.json"),
                            encoding="utf-8").read())
-    with _w.catch_warnings():
-        _w.simplefilter("ignore")           # 하한 미달 경고는 여기서 의미 없음
-        td = real_capacity(
-            os.path.join(HERE, "data", "snapshots"),
-            os.path.join(HERE, "out", "px.csv"),
-            adv_csv, aum_eok=3000.0, participation=0.10, policy="mid")
+    # 이 클레임은 백테스트 이벤트를 재생하므로 weighting 의 '희소 조항 발동'
+    # 로그가 수십 줄 딸려 나온다. 확정 실행 로그에서 그 줄들은 정보가 아니라
+    # 소음이고, 정작 봐야 할 [PASS]/[FAIL] 표를 밀어낸다. 재생 구간에서만
+    # 낮추고 원복한다 - 엔진 기본 로그 설정은 건드리지 않는다.
+    _wl = _log.getLogger("src.weighting")
+    _prev = _wl.level
+    _wl.setLevel(_log.ERROR)
+    try:
+        with _w.catch_warnings():
+            _w.simplefilter("ignore")       # 하한 미달 경고는 여기서 의미 없음
+            td = real_capacity(
+                os.path.join(HERE, "data", "snapshots"),
+                os.path.join(HERE, "out", "px.csv"),
+                adv_csv, aum_eok=3000.0, participation=0.10, policy="mid")
+    finally:
+        _wl.setLevel(_prev)
     if td.empty:
         return False, "용량 재생 결과가 비었습니다"
     worst = td.sort_values("소요일수", ascending=False).iloc[0]
@@ -356,6 +367,51 @@ def c_capacity_measured():
         f"ADV60 {float(worst['adv60_억']):.0f}억 · 함의상한 "
         f"{float(worst['함의상한']) * 100:.2f}%) · ADV60 실측 {len(adv)}종목 "
         f"({man.get('asof')} 1시점 - 시계열 아님 · 정기·캡만 반영)"
+    )
+
+
+def c_bucket_mandate_real():
+    """실지수에서 앵커 40%가 지켜진 적이 있는가 - 합성이 아닌 실측.
+
+    무엇이 달라졌나
+    ---------------
+    기존 클레임(c_bucket_drift)은 **합성 가격**에서 "개별 캡이 못 잡는 버킷
+    드리프트가 있다"는 메커니즘을 보였다. 그건 술식의 성질이지 우리 지수의
+    수치가 아니다. 이 클레임은 실제 스냅샷 13회 · 실제 가격 1498거래일로
+    같은 질문을 다시 던지고, 답이 다르다는 것을 고정한다.
+
+      · 앵커 40%는 13회 중 1회만 실현됐다. 나머지는 희소 조항이 발동해
+        85% / 67% / 64%에서 **출발**했다. 흘러내린 것이 아니다.
+      · 40% 대비 괴리의 대부분은 구조 성분이다. 드리프트 성분은 소수다.
+        즉 리밸런싱 주기를 조여도 해결되지 않는다.
+
+    왜 CLAIMS 에 두는가
+    -------------------
+    이 문장은 규정과 구현의 불일치를 주장하므로 AUDITS 성격도 있다. 그러나
+    발표에서 **먼저 말해야 하는 사실**이라 CLAIMS 에 둔다 - 질문받고 나서
+    말하면 은폐로 읽힌다.
+    """
+    from analysis.bucket_drift import measure
+    m = measure(os.path.join(HERE, "data", "snapshots"),
+                os.path.join(HERE, "out", "px.csv"))
+    rev, best = m["reviews"], m["실현가능_최소구성"]
+    floor = m["cfg"].min_constituents
+    ok = (
+        m["재현오차"] < 1e-10                     # 엔진과 같은 지수를 본 것
+        and m["총_회차"] > 0
+        and m["규정충족_회차"] < m["총_회차"]      # 40%가 안 지켜진 회차가 있다
+        and m["구조_비중"] > 0.5                   # 원인이 가격이 아니라 규칙이다
+        and best["종목수"] > floor                 # 하한이 실현가능 하한보다 낮다
+    )
+    nocore = int((rev["핵심수"] == 0).sum())
+    return ok, (
+        f"앵커 40% 실현 {m['총_회차']}회 중 {m['규정충족_회차']}회 · "
+        f"시간가중평균 {m['앵커_시간가중평균']:.1%} · "
+        f"+-5%p 밴드 체류 {m['밴드내_비율']:.1%} · "
+        f"괴리 분해 구조 {m['구조성분'] * 100:.2f}%p vs 드리프트 "
+        f"{m['드리프트성분'] * 100:.2f}%p (구조가 {m['구조_비중']:.0%}) · "
+        f"핵심군 0종목 {nocore}회 · 실현가능 하한 {best['종목수']}종목 > "
+        f"선언 하한 {floor}종목"
     )
 
 
@@ -531,8 +587,14 @@ CLAIMS = [
      c_tr_equivalence, "tests/test_tr_equivalence.py", "실측(수치 검증)"),
     ("월말 30% 캡은 상시 가동되며 단일 종목 쏠림을 25%로 누른다",
      c_monthly_cap, "analysis/audit_review_claims.py", "엔진 실측(합성 가격)"),
-    ("개별 캡이 잡지 못하는 버킷 레벨 드리프트가 존재한다(위원회 상정 사안)",
+    # 아래 두 줄은 짝이다. 앞은 술식의 성질(합성 가격), 뒤는 우리 지수의 수치
+    # (실측). 앞 문장만 인용하면 "드리프트가 원인"으로 읽히는데, 실측에서는
+    # 드리프트가 소수 성분이다. 순서와 꼬리표를 바꾸지 말 것.
+    ("개별 캡은 버킷 레벨을 보지 않는다(술식 성질 - 합성 가격 시연)",
      c_bucket_drift, "analysis/audit_review_claims.py", "엔진 실측(합성 가격)"),
+    ("실지수에서 앵커 40%는 13회 중 1회만 실현됐고 괴리는 대부분 구조 성분이다"
+     "(위원회 상정 사안)",
+     c_bucket_mandate_real, "analysis/bucket_drift.py", "실측(스냅샷 13회·전 거래일)"),
     ("고정 % 상한은 ADV에 따라 소요일수가 수십 배 달라져 안전장치가 못 된다",
      c_capacity_inverse, "analysis/capacity_v2.py", "산식 실측(가정 ADV)"),
     ("오늘 판정값을 과거에 복사하면 편출입이 0이 되어 버퍼 비교가 불가능하다",

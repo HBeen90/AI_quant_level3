@@ -122,9 +122,15 @@ def test_scanner_catches_unsigned_magnitude():
 
 def test_project_docs_pass_scan():
     """프로젝트 문서가 스스로 규칙을 지키는가 - 규칙을 쓴 문서가 위반하면 끝이다."""
+    # 목록으로 두는 이유(glob 전량 스캔으로 바꾸지 말 것): 작업 로그 성격의
+    # 문서(리밸런싱_마무리_보고.md 등)는 확정 실행의 실측치를 그대로 싣는다.
+    # 코드를 고치면 FINAL 매니페스트가 무효가 되어 그 수치들이 다시 잠기고,
+    # 전량 스캔이면 **매니페스트를 되살릴 확정 실행 자체가 이 검사에 막힌다**
+    # (이 저장소에서 두 번 겪은 순서 함정과 같은 구조). 발표에 나가는 문서만
+    # 명시적으로 넣는다.
     docs = [os.path.join(HERE, "docs", f) for f in
             ("FACTSHEET.md", "00_INDEX.md", "DEVELOP_ROADMAP.md",
-             "WHAT_IS_PIT_SNAPSHOT.md")]
+             "WHAT_IS_PIT_SNAPSHOT.md", "버킷규정_개정안.md")]
     docs = [d for d in docs if os.path.exists(d)]
     assert docs, "점검할 문서를 못 찾음"
     hits = scan_forbidden(docs)

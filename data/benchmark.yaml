@@ -6,10 +6,26 @@
 #   - KRX 반도체 TR의 산출 개시일(2024-12-09)과 과거 시계열 최초
 #     관측일은 같은 개념이 아니다. resolver 출력으로 최초 관측일을 확인한다.
 #
-# CONFIRMED 전환 절차:
-#   1) python analysis\resolve_benchmark_code.py
-#   2) 아래 PR/TR 코드·정확한 표기명과 최초 관측일을 회의록에 기록
+# ── resolver 실행 기록 (2026-07-30, INDEX_ASOF=2026-07-23) ─────────────
+#   [RESOLVED] PR   KRX   5044   "KRX 반도체"
+#              최초 관측 2010-01-04 · 최종 관측 2026-07-23 · 4,075관측
+#              -> 백테스트 구간(2020-06-15~2026-07-23) 전체를 덮는다.
+#   [ABSENT]   TR   "KRX 반도체 TR" 표기가 KRX 지수 목록에 없다(0건).
+#              반도체 후보 4건 전수: 5044 KRX 반도체 / 5422 KRX 반도체 Top 15 /
+#              5450 KRX AI 반도체 지수 / 5453 KRX K-AI 반도체TOP2+ 지수.
+#              -> TR 보조 비교는 '미공표'를 사유로 생략한다. 위 주석의
+#                 "TR 별도 보조 비교"는 현 시점 실행 불가이며, KRX가 TR 계열을
+#                 공표하면 그때 재개한다.
+#   ※ 헤드라인이 PR 이므로 run_backtest.py 는 pr_code 만 소비한다.
+#      tr_code 공란은 CONFIRMED 전환을 막지 않는다.
+#
+# CONFIRMED 전환 절차 (남은 것은 3번뿐):
+#   1) python analysis\resolve_benchmark_code.py          [완료 2026-07-30]
+#   2) 코드·표기명·최초 관측일을 회의록에 기록             [위 블록 = 기록본]
 #   3) effective_date·resolved_by 기입, 재배포 권한 확인 후 status 변경
+#      -> 기입 후 status 를 CONFIRMED 로 바꿀 것. 셋 중 하나라도 비면
+#         run_backtest.py 가 fail-closed 로 중단한다(조용히 잠정으로
+#         떨어지지 않는다).
 
 status: PROVISIONAL
 headline_return_type: PR
@@ -21,8 +37,8 @@ fallback_keyword: 반도체
 primary:
   pr_name: "KRX 반도체"
   tr_name: "KRX 반도체 TR"
-  pr_code: ""
-  tr_code: ""
+  pr_code: "5044"          # resolver 확인 (KRX, 2010-01-04~, 4075관측)
+  tr_code: ""              # 미공표 - 위 [ABSENT] 참조
   source: KRX
   rationale: "국내 반도체 섹터 대비 HBM 선별 효과를 분리하는 지역·섹터 정합 벤치마크"
 

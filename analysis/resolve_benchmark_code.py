@@ -40,6 +40,17 @@ def _as_of() -> str:
 
 
 def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(
+        description="Resolve KRX Semiconductor PR/TR codes without guessing.")
+    ap.add_argument("--headline", choices=("PR", "TR"), default="PR",
+                    help="benchmark.yaml 의 headline_return_type. 이 계열만 "
+                         "정확히 1건으로 해결되면 통과한다 (기본 PR).")
+    ap.add_argument("--require-both", action="store_true",
+                    help="PR·TR 두 계열 모두 해결돼야 통과 (과거 동작).")
+    a = ap.parse_args()
+
     try:
         from pykrx import stock
     except ImportError:
@@ -92,20 +103,41 @@ def main() -> int:
     for market, code, name in candidates:
         print(f"{market}\t{code}\t{name}")
 
-    if any(len(matches[return_type]) != 1 for return_type in ("PR", "TR")):
-        for return_type in ("PR", "TR"):
-            print(f"[PENDING] {return_type}: expected 1 exact alias, found "
-                  f"{len(matches[return_type])}")
+    # 통과 조건은 '헤드라인 계열이 정확히 1건'이다. 과거에는 PR·TR 둘 다를
+    # 요구했는데, KRX 지수 목록에 TR 표기가 존재하지 않으면 그 조건은 영원히
+    # 충족되지 않는다. 그러면 해결된 PR 코드까지 [PENDING] 으로 묻혀 버려,
+    # '아직 못 찾았다'와 '애초에 없다'가 구분되지 않는다. benchmark.yaml 의
+    # 운영 결정도 헤드라인은 PR 하나이므로, 요구 조건을 그에 맞춘다.
+    # (--require-both 로 과거 동작 복원 가능)
+    required = ("PR", "TR") if a.require_both else (a.headline,)
+    optional = tuple(rt for rt in ("PR", "TR") if rt not in required)
+
+    if any(len(matches[rt]) != 1 for rt in required):
+        for rt in required:
+            print(f"[PENDING] {rt}: expected 1 exact alias, found "
+                  f"{len(matches[rt])}")
         print("[ACTION] Confirm the exact KRX display names; do not guess a code.")
         return 1
 
     print("[RESOLVED]")
-    for return_type in ("PR", "TR"):
-        item = matches[return_type][0]
+    for rt in required:
+        item = matches[rt][0]
         print(
-            f"{return_type}\t{item['market']}\t{item['code']}\t{item['name']}\t"
+            f"{rt}\t{item['market']}\t{item['code']}\t{item['name']}\t"
             f"{item['first']}\t{item['last']}\t{item['observations']}"
         )
+    for rt in optional:
+        if len(matches[rt]) == 1:
+            item = matches[rt][0]
+            print(
+                f"{rt}(optional)\t{item['market']}\t{item['code']}\t{item['name']}\t"
+                f"{item['first']}\t{item['last']}\t{item['observations']}"
+            )
+        else:
+            # 부재를 조용히 넘기지 않는다 - '보조 비교 생략'의 근거로 기록돼야 한다.
+            print(f"[ABSENT] {rt}: exact alias not published in the KRX index "
+                  f"list (found {len(matches[rt])}). Record this in the "
+                  f"committee minutes as the reason the {rt} comparison is omitted.")
     print("[ACTION] Copy the exact code/name and observed first date into the "
           "committee record before setting status: CONFIRMED.")
     return 0

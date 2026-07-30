@@ -356,14 +356,35 @@ def resolve_benchmark_spec(cfg: dict | None, mode: str = "pr",
 
 def fetch_benchmark(start: str, end: str, keyword: str = "반도체",
                     cache: str | None = None, mode: str = "pr",
-                    config_path: str | None = None) -> pd.Series:
+                    config_path: str | None = None,
+                    require_confirmed: bool = False) -> pd.Series:
     """벤치마크 지수 종가.
 
     우선순위: benchmark.yaml 이 status=CONFIRMED 면 **코드로 고정 조회**하고
     조회된 지수명이 지정명과 다르면 중단(KRX 코드 개편 방어). 미확정이면 이름기반
     '잠정' 선택을 하되 공식 발표 금지 경고를 남긴다. --mode 에 맞춰 PR/TR 계열을
     선택한다(config_path 기본 = data/benchmark.yaml).
+
+    require_confirmed=True 면 미확정 벤치마크를 **경고가 아니라 중단**으로
+    처리한다. 확정 실행에서 status!=CONFIRMED 인 채로 통과하면, 이름기반으로
+    임시 선택된 지수의 추종오차가 FINAL 매니페스트에 실린다 - 표준출력의
+    경고 한 줄은 나중에 아무도 다시 읽지 않는다. 게이트 d2 가 사람 쪽에서
+    막는 것을 기계 쪽에서도 막는다(같은 사실을 두 곳에서 확인).
     """
+    if require_confirmed:
+        # 캐시 분기보다 먼저 본다 - 캐시가 있으면 설정을 안 읽고 반환하므로,
+        # 뒤에 두면 낡은 캐시로 검사를 통째로 건너뛸 수 있다.
+        cfg0 = load_benchmark_config(config_path if config_path is not None
+                                     else DEFAULT_BENCHMARK_CONFIG)
+        if resolve_benchmark_spec(cfg0, mode,
+                                  default_keyword=keyword)["status"] != "confirmed":
+            sys.exit(
+                "[FAIL] 확정 실행인데 benchmark.yaml status != CONFIRMED 입니다.\n"
+                "  선택지 1) resolve_benchmark_code.py 로 코드를 확인하고 "
+                "pr_code/effective_date/resolved_by 기입 후 status: CONFIRMED\n"
+                "  선택지 2) --no-benchmark 로 벤치마크를 명시적으로 제외 "
+                "(게이트 d2 에 제외 결정과 사유를 기록할 것)")
+
     if cache and os.path.exists(cache):
         s = pd.read_csv(cache, index_col=0, parse_dates=True).iloc[:, 0]
         if not s.index.is_monotonic_increasing or s.index.has_duplicates:
@@ -442,7 +463,8 @@ def fetch_benchmark(start: str, end: str, keyword: str = "반도체",
 
 def fetch_benchmarks(start: str, end: str, keyword: str,
                      cache: str | None, mode: str,
-                     config_path: str | None) -> dict[str, pd.Series]:
+                     config_path: str | None,
+                     require_confirmed: bool = False) -> dict[str, pd.Series]:
     """요청 모드별 벤치마크를 조회한다. both는 PR/TR을 분리한다."""
     modes = ("pr", "gross_tr") if mode == "both" else (mode,)
     result = {}
@@ -455,6 +477,7 @@ def fetch_benchmarks(start: str, end: str, keyword: str,
         result[current] = fetch_benchmark(
             start, end, keyword, current_cache,
             mode=current, config_path=config_path,
+            require_confirmed=require_confirmed,
         )
     return result
 
@@ -774,6 +797,7 @@ def main() -> int:
         benchmarks = fetch_benchmarks(
             start, end, a.benchmark_keyword, a.benchmark_cache,
             a.mode, a.benchmark_config,
+            require_confirmed=a.require_lineage,
         )
 
     divs = load_dividends(a.dividends, px)

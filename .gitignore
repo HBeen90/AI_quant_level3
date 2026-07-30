@@ -26,3 +26,9 @@ notebooks/00_concept_check.ipynb
 
 # 판정 추인 DART 발췌·해시(2026-07-30) - 정정 근거
 !evidence/judgment_ratification_20260730/
+
+# 생존편향 조사 증거(2026-07-31) - 커밋 대상 예외
+# verify_claims.c_survivorship_survey 가 이 명단으로 재현하므로 반드시 따라가야
+# 한다. 빠지면 새로 클론한 사람에게서 "캐시 없음"으로 클레임이 실패하고,
+# '조사했다'는 발표 문장이 재현 불가가 된다.
+!evidence/survivorship/

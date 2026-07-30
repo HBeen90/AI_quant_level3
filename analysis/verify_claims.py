@@ -273,6 +273,41 @@ def c_final_ledger():
     )
 
 
+def c_survivorship_survey():
+    """생존편향 - 표본 기간 소멸 종목 전수 조사를 보존 명단으로 재현한다.
+
+    무엇을 주장하고 무엇을 주장하지 않는가
+    -------------------------------------
+    주장한다   : 조사 범위(심사 13시점 전 시장 명단)와 후보 수(0건)
+    주장 안 한다: 편향의 **크기**. 후보가 0건이라 재실행할 대상이 없어
+                 크기 측정 자체가 성립하지 않는다. FORBIDDEN 에 그대로 둔다.
+
+    두 기준(소멸 직전 / 편입 이력)이 **모두** 0건일 때만 통과시킨다. 한쪽만
+    0이면 결론이 기준 선택에 의존한다는 뜻이고, 그건 조사가 아니라 우연이다.
+    """
+    from analysis.survivorship_check import (find_disappeared, ledger_tickers,
+                                             review_dates)
+    snap_dir = os.path.join(HERE, "data", "snapshots")
+    ev_dir = os.path.join(HERE, "evidence", "survivorship")
+    dates = review_dates(snap_dir)
+    gone = find_disappeared(dates, ev_dir)          # 캐시 없으면 SystemExit
+    known = ledger_tickers(snap_dir)
+    n_strict = int(gone["소멸직전_반도체지수"].sum())
+    n_ever = int(gone["반도체지수_이력"].sum())
+    cand = gone[gone["반도체지수_이력"] & ~gone["ticker"].isin(known)]
+    ok = (
+        len(dates) == 13
+        and len(gone) > 0                 # 전 시장 소멸 0건은 캐시 이상 신호
+        and n_strict == n_ever            # 기준 선택에 의존하지 않을 것
+        and len(cand) == 0
+    )
+    return ok, (
+        f"심사 {len(dates)}시점 전 시장 소멸 {len(gone)}건 전수 조사 · "
+        f"반도체지수 편입 이력 보유 {n_ever}건(직전 기준 {n_strict}건) · "
+        f"판정 대상 후보 {len(cand)}건 - 크기는 미측정"
+    )
+
+
 def c_kind_admin_history():
     """D3 KIND 0350 조사 결과와 보존 원응답 232건을 재검증한다."""
     import hashlib
@@ -407,6 +442,8 @@ CLAIMS = [
     ("관리종목 이력 조사는 공식 KIND 0350 정확종목 질의와 양성 대조로 재현된다",
      c_kind_admin_history, "evidence/kind_admin_history_20260730/run_manifest.json",
      "실측(공식 원응답 교차검증)"),
+    ("생존편향은 소멸 종목 전수 조사로 후보 0건이 확인됐다(크기는 미측정)",
+     c_survivorship_survey, "evidence/survivorship/", "실측(상장 명단 대조)"),
     ("전 테스트 스위트가 통과한다",
      c_test_suite, "tests/run_all.py", "실측(실행)"),
 ]
@@ -431,8 +468,12 @@ FORBIDDEN = [
      "FINAL_INPUT_CONTRACT은 완성됐으나 L09 계보 검증은 아직 PARTIAL"),
     ("종목별 ADV60 · 유동시총 시계열",
      "pykrx 수집 미실행 (2026-07-23 1회분·PIT 스냅샷 13회분 제외)"),
+    # 조사 범위·후보 수는 이제 재현되는 클레임이라 말할 수 있다(c_survivorship_survey).
+    # 그러나 **크기**는 여전히 못 잰다 - 후보가 0건이면 재실행할 대상이 없어
+    # 차이를 측정할 방법 자체가 없기 때문이다. '조사했다'와 '크기를 안다'는
+    # 다른 말이므로 이 항목은 남긴다.
     ("생존편향 크기 (1.5~3.0%p 등)",
-     "크기 미측정 - 방향·개별 사례 판정만 고지 가능"),
+     "크기 미측정 - 조사 범위·후보 0건은 고지 가능하나 크기는 산출 불가"),
 ]
 
 

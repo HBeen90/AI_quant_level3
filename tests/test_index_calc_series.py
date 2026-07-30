@@ -82,21 +82,33 @@ def test_exclusion_matches_soyeon_normalization():
 
 
 def test_share_change_absorbs_without_jump():
-    """기업행위 ΔM: 그날 지수는 그대로, 이후 주가 변동만 반영."""
-    px = _prices(60)
+    """기업행위 ΔM: 그날 지수는 그대로, 가격이 안 움직였으면 이후에도 지수가
+    그대로 유지된다.
+
+    (예전 버전은 "ΔM>0이면 이후 레벨이 낮아져야 한다"고 반대로 단정하고
+    있었다 - 제수(B)만 조정하고 해당 종목의 유동시총 기준은 안 바꾸는
+    구현의 버그를 정답인 것처럼 검증하고 있었던 것. 가격이 하나도 안
+    움직인 통제된 상황에서 확인해야 이 문제가 정확히 드러난다.)"""
+    dates = pd.bdate_range(ic.BASE_DATE, periods=10)
+    flat = pd.DataFrame({c: 100.0 for c in CODES}, index=dates)  # 가격 전혀 불변
     w0 = pd.Series(np.repeat(1 / len(CODES), len(CODES)), index=CODES)
     f0 = pd.Series(np.linspace(1e6, 1e4, len(CODES)), index=CODES)
-    d_ca = px.index[30]
-    base = ic.build_index_series(px, [{"date": px.index[0], "weights": w0,
-                                       "ff_mcap": f0}])
+    d_ca = dates[3]
+    ticker = CODES[0]
+
+    base = ic.build_index_series(flat, [{"date": dates[0], "weights": w0,
+                                         "ff_mcap": f0}])
     with_ca = ic.build_index_series(
-        px, [{"date": px.index[0], "weights": w0, "ff_mcap": f0}],
-        [{"date": d_ca, "kind": "share_change", "delta_M": 5e5}])
+        flat, [{"date": dates[0], "weights": w0, "ff_mcap": f0}],
+        [{"date": d_ca, "kind": "share_change", "ticker": ticker, "delta_M": 5e5}])
+
     assert abs(with_ca.loc[d_ca, "level"] - base.loc[d_ca, "level"]) < 1e-9, \
         "기업행위 당일 지수가 점프함 - 제수 조정 시점 오류"
-    assert with_ca.loc[px.index[31], "level"] < base.loc[px.index[31], "level"], \
-        "ΔM>0 인데 이후 레벨이 안 낮아짐 - 제수 방향 오류"
-    print("[OK] 기업행위 ΔM 흡수 (당일 무점프 · 이후 제수 반영)")
+    nxt = dates[4]
+    assert abs(with_ca.loc[nxt, "level"] - base.loc[nxt, "level"]) < 1e-6, \
+        "가격 변화가 전혀 없는데 ΔM 반영 다음날 지수가 달라짐 - " \
+        "제수만 조정하고 유동시총 기준을 안 갱신한 회귀 버그"
+    print("[OK] 기업행위 ΔM 흡수 (당일 무점프 · 가격 불변 시 이후에도 왜곡 없음)")
 
 
 def test_fail_closed_on_missing_price():

@@ -82,7 +82,7 @@ def test_disappearance_detected():
 
 
 def test_candidate_compression():
-    """후보 = 소멸 ∩ 반도체지수 − 원장. 세 조건이 모두 걸려야 한다."""
+    """후보 = (소멸 ∩ 반도체지수) 에서 원장 제외. 세 조건이 모두 걸려야 한다."""
     tmp = tempfile.mkdtemp()
     try:
         snap, ev = make_fixture(tmp)

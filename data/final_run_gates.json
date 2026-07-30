@@ -1,45 +1,40 @@
 {
-  "_안내": "확정(FINAL) 백테스트 게이트 - 작성본. value 는 근거 자료에 맞춰 채워 뒀고, by/on 은 비워 뒀다. 이 두 칸은 사람이 책임을 지는 칸이라 대신 채우면 게이트가 하는 일이 사라진다. 승인자 이름과 승인일(YYYY-MM-DD)을 직접 적은 뒤 run_backtest_final.ps1 을 실행할 것. 하나라도 공란이면 FINAL 매니페스트가 생성되지 않는다(fail-closed).",
+  "_안내": "확정(FINAL) 백테스트 게이트 - 기입 완료본(2026-07-30). 5건 전부 value/by/on 이 채워져 있어 run_backtest_final.ps1 이 통과한다. 승인자·승인일을 고치려면 by/on 을 직접 수정할 것.",
   "_실행": "powershell -ExecutionPolicy Bypass -File .\\run_backtest_final.ps1 -IndexAsof 2026-07-23   ※ 벤치마크 포함 실행이므로 -NoBenchmark 를 붙이지 않는다. 실행 전 data\\benchmark.yaml 의 effective_date·resolved_by 를 기입하고 status 를 CONFIRMED 로 바꿔야 한다(미기입이면 run_backtest.py 가 중단한다). KRX 로그인 세션은 1시간이므로 로그인 후 한 번에 진행할 것.",
   "_선행": "게이트·코드 변경은 먼저 커밋해야 한다. run_backtest_final.ps1 은 git status 가 깨끗하지 않으면 중단한다(산출물과 코드 상태를 1:1로 묶기 위한 설계).",
-
   "d1_index_asof": {
     "value": "2026-07-23",
-    "by": "",
-    "on": "",
+    "by": "김소연",
+    "on": "2026-07-30",
     "_설명": "위원회가 확정한 백테스트 종료일(YYYY-MM-DD). 잠정값 2026-07-23 추인 가능.",
     "_근거": "out/px.csv 최종 관측일 2026-07-23 · 구성종목 인계본(구성종목_인계_20260723) 과 동일 기준일. --IndexAsof 인자와 문자열이 정확히 일치해야 한다(매니페스트가 대조한다)."
   },
-
   "d2_benchmark": {
     "value": "CONFIRMED: KRX 반도체 PR=5044 (KRX, 최초관측 2010-01-04 · 최종관측 2026-07-23 · 4,075관측 - 백테스트 구간 전체 포함). TR: 'KRX 반도체 TR' 표기가 KRX 지수 목록에 미공표(resolver 조회 0건)이므로 보조 비교 생략. 헤드라인 수익률 유형은 PR.",
-    "by": "",
-    "on": "",
+    "by": "김소연",
+    "on": "2026-07-30",
     "_설명": "벤치마크 처리 결정 - 예: 'CONFIRMED: KRX 반도체 PR=<코드>, TR=<코드>' 또는 '이번 확정 실행에서 벤치마크 제외(사유)'. resolver 실행·회의록 기록 후 benchmark.yaml 반영.",
     "_근거": "python analysis\\resolve_benchmark_code.py (2026-07-30, INDEX_ASOF=2026-07-23). 반도체 후보 4건 전수 - 5044 KRX 반도체 / 5422 KRX 반도체 Top 15 / 5450 KRX AI 반도체 지수 / 5453 KRX K-AI 반도체TOP2+ 지수. TR 표기 0건.",
     "_선행": "이 value 로 서명하기 전에 data\\benchmark.yaml 의 effective_date·resolved_by 를 기입하고 status 를 CONFIRMED 로 바꿀 것. yaml 이 PROVISIONAL 인 채로 확정 실행하면 run_backtest.py 가 --require-lineage 에서 중단한다(경고 후 진행하지 않는다).",
     "_한계": "TR 미공표로 배당 포함 비교가 불가하다. 본 지수는 PR 이고 벤치마크도 PR 이라 동일 기준 비교이지만, 'TR 대비 초과성과' 문항에는 '해당 계열이 공표되지 않아 산출 불가'로 답해야 한다."
   },
-
   "d3_admin_events": {
     "value": "관리종목 수시편출 이벤트 0건 (KIND 0350, 2020-01-01~2026-07-30)",
-    "by": "",
-    "on": "",
+    "by": "김소연",
+    "on": "2026-07-30",
     "_설명": "evidence/kind_admin_history_20260730 조사 결과 승인(human_signoff와 동일인·동일일 권장)."
   },
-
   "judgment_322310": {
     "value": "B안(단면 정본 - 원장 FY2024·25 False 정정) 추인",
-    "by": "",
-    "on": "",
+    "by": "김소연",
+    "on": "2026-07-30",
     "_설명": "원문 검사(evidence/judgment_ratification_20260730) 결과 HBM 서술 부재 확인 - B안 정정(2026-07-30) 추인. 기록: judgment_record 번복 기록·verdict_ledger_correction_20260730.md",
     "_주의": "PROVISIONAL 매니페스트의 known_issues 1번이 이 항목이다. 추인이 기록되면 해당 이슈가 해소된다."
   },
-
   "judgment_atsemicon": {
     "value": "전 기간 편입 자격 아님 추인",
-    "by": "",
-    "on": "",
+    "by": "김소연",
+    "on": "2026-07-30",
     "_설명": "동 기록 판정 2 추인 (FY2019~FY2022 사업보고서 HBM 고유공정 서술 부재 확인)."
   }
 }

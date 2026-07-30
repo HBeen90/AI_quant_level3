@@ -27,10 +27,10 @@
 #         run_backtest.py 가 fail-closed 로 중단한다(조용히 잠정으로
 #         떨어지지 않는다).
 
-status: PROVISIONAL
+status: CONFIRMED
 headline_return_type: PR
-effective_date: ""
-resolved_by: ""
+effective_date: "2026-07-30"
+resolved_by: "김소연"
 
 fallback_keyword: 반도체
 

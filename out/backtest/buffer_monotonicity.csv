@@ -1,0 +1,8 @@
+﻿ticker,종목명,관측 수,판정지표,첫 값,끝 값,군 전이,동일군 내 하락,단조 비감소
+000660,SK하이닉스,13,exposure,0.05,0.4,0,0,True
+003160,디아이,13,mem_ratio/exposure,0.85,0.35,1,0,True
+005930,삼성전자,13,exposure,0.01,0.1,0,0,True
+042700,한미반도체,13,mem_ratio/exposure,0.8,0.6,1,0,True
+089030,테크윙,13,mem_ratio/exposure,0.8,0.3,1,0,True
+112290,와이씨켐,7,mem_ratio,0.75,0.75,0,0,True
+348210,넥스틴,11,exposure,0.0,0.5,0,0,True

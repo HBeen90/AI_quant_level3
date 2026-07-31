@@ -1,6 +1,6 @@
 {
   "status": "FINAL_INPUT_CONTRACT",
-  "lineage_level": "L09_PARTIAL",
+  "lineage_level": "METADATA_VERIFIED",
   "generated_at": "2026-07-29",
   "decision_record": "docs/verdict_ledger_final_decision_record_20260729.md",
   "rows": 215,
@@ -205,7 +205,46 @@
     "pandas": "2.3.3"
   },
   "independent_recollection": {
-    "status": "PENDING",
+    "status": "DONE",
+    "performed_on": "2026-07-31",
+    "performed_by": "김소연 (절차적 독립 - scope.csv 만 입력, 원장 판정값·접수번호 미참조)",
+    "tool": "analysis/recollect_pit_evidence.py",
+    "evidence_dir": "evidence/recollect_20260731/",
+    "rows_recollected": 215,
+    "status_counts": {
+      "OK": 215
+    },
+    "crosscheck": {
+      "MATCH": 213,
+      "MATCH_RCPNO_DATE": 2,
+      "MISMATCH": 0,
+      "NOT_COLLECTED": 0,
+      "ONLY_LEDGER": 0,
+      "ONLY_RECOLLECT": 0
+    },
+    "known_exceptions": [
+      {
+        "ticker": "014680",
+        "fiscal_year": 2020,
+        "note": "rcept_dt=20210317 vs rcpNo 내장일 20210316 - 정본은 rcpNo 내장일"
+      },
+      {
+        "ticker": "067310",
+        "fiscal_year": 2022,
+        "note": "rcept_dt=20230328 vs rcpNo 내장일 20230327 - 정본은 rcpNo 내장일"
+      },
+      {
+        "ticker": "322310",
+        "fiscal_year": 2024,
+        "note": "원문 HBM 언급 0회 - B안 정정 반영분(신규 발견 아님)"
+      },
+      {
+        "ticker": "322310",
+        "fiscal_year": 2025,
+        "note": "원문 HBM 언급 0회 - B안 정정 반영분(신규 발견 아님)"
+      }
+    ],
+    "scope_note": "접수번호·접수일·보고서명·원문 해시의 재현을 확인했다. 매출 노출도 등 내용 판정값의 재판정은 포함하지 않으며 파트2 책임으로 남는다.",
     "required_for_final_input_contract": false,
     "required_for_metadata_verified": true
   },

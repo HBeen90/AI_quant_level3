@@ -576,6 +576,115 @@ def c_test_suite():
 # 등록부
 # ==========================================================================
 #: 발표·문서에 **인용해도 되는** 문장. PASS = 지금 이 순간 재현됨.
+def c_cap_degeneracy():
+    """월말 캡이 소수 종목 구성에서 상한이 아니라 균등비중 복원으로 퇴화하는가.
+
+    c_monthly_cap 과 짝이다. 앞 문장은 합성 12종목에서 '캡이 25%로 누른다'를
+    보이고, 이 문장은 **우리 지수의 실제 구성**에서 그 보장이 성립하지 않음을
+    보인다. 앞 문장만 인용하면 실측 최대비중 33.33%와 정면으로 충돌한다.
+    순서와 꼬리표를 바꾸지 말 것.
+    """
+    import pandas as pd
+    from analysis.cap_feasibility import is_degenerate
+    from src.rebalance import ConfigV2
+    cfg = ConfigV2()
+    deg3 = all(is_degenerate(pd.Series(w), cfg)[1]
+               for w in ([0.34, 0.33, 0.33], [0.50, 0.30, 0.20],
+                         [0.40, 0.35, 0.25], [0.36, 0.32, 0.32]))
+    _, deg5, _, mx5 = is_degenerate(pd.Series([0.45, 0.25, 0.15, 0.10, 0.05]), cfg)
+    log = pd.read_csv(os.path.join(_BT_DIR, "event_log.csv"))
+    cap = log[log["reason"] == "cap"]
+    small = cap[cap["n_members"] <= 4]
+    share = float(small["one_way_turnover"].sum() / log["one_way_turnover"].sum())
+    ok = deg3 and (not deg5) and mx5 <= 0.25 + 1e-9 and len(small) >= 1
+    return ok, (f"3종목 구성은 캡 발동 시 100% 균등비중으로 퇴화(최대비중 33.33%) · "
+                f"5종목은 퇴화 없이 25%로 눌림 · 실측 캡 {len(cap)}건 중 "
+                f"{len(small)}건이 5종목 미만 구간 = 전체 회전율의 {share:.1%}")
+
+
+def c_concentration_realized():
+    """전 구간 집중도가 확정 단면보다 훨씬 높은가(단면만 인용 금지)."""
+    import pandas as pd
+    from analysis.concentration_replication import concentration_history
+    from analysis.run_backtest import load_snapshots
+    from backtest.backtest import build_event_schedule
+    from src.rebalance import ConfigV2
+    snaps = load_snapshots(os.path.join(HERE, "data", "snapshots"))
+    px = pd.read_csv(os.path.join(_BT_DIR, "..", "px.csv"),
+                     index_col=0, parse_dates=True)
+    px.columns = [str(c).zfill(6) for c in px.columns]
+    px = px.dropna(axis=1, how="all")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        events, _ = build_event_schedule(px, snaps, cfg=ConfigV2.with_policy("mid"))
+    groups = {pd.Timestamp(d): snaps[d].set_index("ticker")["group"] for d in snaps}
+    daily = concentration_history(px, events, groups)
+    eff_med = float(daily["유효종목수"].median())
+    top3_med = float(daily["상위3비중"].median())
+    under5 = float((daily["유효종목수"] < 5).mean())
+    return eff_med < 3.5 and top3_med > 0.99, \
+        (f"전 {len(daily)}거래일 유효종목수 중앙 {eff_med:.2f} · "
+         f"상위3 비중 중앙 {top3_med:.2%} · 유효종목수 5 미만 {under5:.1%} "
+         f"(2026-07-23 단면은 유효종목수 5.78 - 전 구간 중 가장 분산된 시점)")
+
+
+def c_band_infeasible_with_cap():
+    """버킷 밴드(안 C)의 기준점이 개별 캡과 산술적으로 양립하는가."""
+    import pandas as pd
+    path = os.path.join(_BT_DIR, "bucket_drift_reviews.csv")
+    r = pd.read_csv(path)
+    col = [c for c in r.columns if "앵커" in c and "실현" in c]
+    ref = r[col[0]].astype(float)
+    ceiling = 2 * 0.30                      # 앵커 2종목 x 캡 트리거 30%
+    reachable = int((ref <= ceiling + 1e-12).sum())
+    return reachable == 1, \
+        (f"캡 하에서 지속 가능한 앵커 버킷 최대치 = 앵커 2종목 x 30% = "
+         f"{ceiling:.0%} · 밴드 기준점(리셋 실현치) {sorted(set(ref.round(2)))} 중 "
+         f"도달 가능한 회차는 {reachable}/{len(ref)}회뿐 - 나머지는 밴드와 캡이 "
+         f"서로를 되돌리는 진동이 된다")
+
+
+def c_pit_recollection():
+    """DART 원문 215건 독립 재수집이 원장 근거와 전수 일치하는가.
+
+    '원장이 형식상 완성됐다'와 '그 근거가 원문에서 재확인됐다'는 다른 사실이다.
+    이 클레임은 뒤의 것만 검증한다 - 접수번호·접수일·보고서명·원문 해시의
+    재현이며, 매출 노출도 같은 **내용 판정값의 재판정은 포함하지 않는다**
+    (파트2 책임). 그 구분을 흐리면 "판정까지 검증했다"는 과장이 된다.
+
+    알려진 예외 4건은 목록으로 고정한다. 새 예외가 생기면 즉시 FAIL 이
+    되도록 - 그래야 이 검증이 다음에도 의미를 갖는다.
+    """
+    import glob
+    import pandas as pd
+    paths = sorted(glob.glob(os.path.join(HERE, "evidence", "recollect_*",
+                                          "crosscheck.csv")))
+    if not paths:
+        return False, "재수집 대조 결과가 없다 - analysis/recollect_pit_evidence.py 미실행"
+    cc = pd.read_csv(paths[-1], dtype={"ticker": str})
+    v = cc["verdict"].value_counts().to_dict()
+    ok_rows = int(v.get("MATCH", 0) + v.get("MATCH_RCPNO_DATE", 0))
+    bad = int(v.get("MISMATCH", 0) + v.get("NOT_COLLECTED", 0)
+              + v.get("ONLY_LEDGER", 0) + v.get("ONLY_RECOLLECT", 0))
+    # 접수일 표기 상이 2건 (rcept_dt vs rcpNo 내장일)
+    date_only = {(str(r.ticker).zfill(6), int(r.fiscal_year))
+                 for r in cc[cc["verdict"] == "MATCH_RCPNO_DATE"].itertuples()}
+    # 원문 HBM 언급 0회 (B안 정정 반영분 - 신규 발견 아님)
+    flagged = {(str(r.ticker).zfill(6), int(r.fiscal_year))
+               for r in cc[cc["flag_zero_hbm"].astype(str).str.lower()
+                           == "true"].itertuples()}
+    KNOWN_DATE = {("014680", 2020), ("067310", 2022)}
+    KNOWN_ZERO = {("322310", 2024), ("322310", 2025)}
+    ok = (ok_rows == 215 and bad == 0
+          and date_only == KNOWN_DATE and flagged == KNOWN_ZERO)
+    extra = (date_only - KNOWN_DATE) | (flagged - KNOWN_ZERO)
+    return ok, (f"215건 재수집 · 일치 {ok_rows} · 불일치 {bad} · "
+                f"접수일 표기 상이 {len(date_only)}건(기지) · "
+                f"원문 HBM 0회 {len(flagged)}건(B안 정정 반영분) · "
+                f"신규 예외 {len(extra)}건"
+                + (f" {sorted(extra)}" if extra else ""))
+
+
 CLAIMS = [
     ("기준일 2020-06-15는 임의 상수가 아니라 3장 일정 조문의 산출값이다",
      c_base_date, "analysis/index_calendar.py", "실측(조문 재생)"),
@@ -585,7 +694,7 @@ CLAIMS = [
      c_adhoc_equivalence, "tests/test_index_calc_series.py", "실측(수치 검증)"),
     ("TR 지수는 제수 보정 경로와 배당 재투자 경로가 일치한다",
      c_tr_equivalence, "tests/test_tr_equivalence.py", "실측(수치 검증)"),
-    ("월말 30% 캡은 상시 가동되며 단일 종목 쏠림을 25%로 누른다",
+    ("월말 30% 캡은 상시 가동되며 5종목 이상 구성에서 쏠림을 25%로 누른다",
      c_monthly_cap, "analysis/audit_review_claims.py", "엔진 실측(합성 가격)"),
     # 아래 두 줄은 짝이다. 앞은 술식의 성질(합성 가격), 뒤는 우리 지수의 수치
     # (실측). 앞 문장만 인용하면 "드리프트가 원인"으로 읽히는데, 실측에서는
@@ -595,6 +704,16 @@ CLAIMS = [
     ("실지수에서 앵커 40%는 13회 중 1회만 실현됐고 괴리는 대부분 구조 성분이다"
      "(위원회 상정 사안)",
      c_bucket_mandate_real, "analysis/bucket_drift.py", "실측(스냅샷 13회·전 거래일)"),
+    ("월말 캡은 5종목 미만 구성에서 상한이 아니라 균등비중 복원으로 퇴화한다"
+     "(위원회 상정 사안)",
+     c_cap_degeneracy, "analysis/cap_feasibility.py",
+     "실측(술식 + 이벤트 원장)"),
+    ("전 구간 집중도는 확정 단면보다 크게 높다 - 유효종목수 중앙 3.00",
+     c_concentration_realized, "analysis/concentration_replication.py",
+     "실측(전 거래일)"),
+    ("버킷 밴드 기준점은 개별 캡과 산술적으로 양립하지 않는다(안 C 보류 근거)",
+     c_band_infeasible_with_cap, "analysis/bucket_band_turnover.py",
+     "실측(산술 + 리셋 실현치)"),
     ("고정 % 상한은 ADV에 따라 소요일수가 수십 배 달라져 안전장치가 못 된다",
      c_capacity_inverse, "analysis/capacity_v2.py", "산식 실측(가정 ADV)"),
     ("오늘 판정값을 과거에 복사하면 편출입이 0이 되어 버퍼 비교가 불가능하다",
@@ -606,6 +725,9 @@ CLAIMS = [
      "실측(한 시점 교차검증)"),
     ("역사적 PIT 판정 원장은 strict FINAL 215행이며 NO_DATA 8행은 별도 보존된다",
      c_final_ledger, "data/verdict_ledger.csv", "실측(입력계약 검증)"),
+    ("DART 원문 215건 독립 재수집이 원장 근거와 전수 일치한다(계보 METADATA_VERIFIED)",
+     c_pit_recollection, "evidence/recollect_20260731/crosscheck.csv",
+     "실측(독립 재수집 전수 대조)"),
     ("관리종목 이력 조사는 공식 KIND 0350 정확종목 질의와 양성 대조로 재현된다",
      c_kind_admin_history, "evidence/kind_admin_history_20260730/run_manifest.json",
      "실측(공식 원응답 교차검증)"),
@@ -636,8 +758,6 @@ AUDITS = [
 #: (백테스트 성과 수치는 forbidden_rows() 가 실행 상태에 따라 동적으로 얹는다
 #:  - 잠정 실행 단계에서는 금지 유지, FINAL 매니페스트가 있어야 해제)
 FORBIDDEN = [
-    ("DART 215건 독립 재수집 대조 완료 주장",
-     "FINAL_INPUT_CONTRACT은 완성됐으나 L09 계보 검증은 아직 PARTIAL"),
     ("종목별 ADV60 · 유동시총 시계열",
      "pykrx 수집 미실행 (2026-07-23 1회분·PIT 스냅샷 13회분 제외)"),
     # 조사 범위·후보 수는 이제 재현되는 클레임이라 말할 수 있다(c_survivorship_survey).

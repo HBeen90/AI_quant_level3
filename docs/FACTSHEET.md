@@ -30,7 +30,7 @@ python analysis/verify_claims.py --scan 발표자료.md   # 금지 수치 유출
 
 ---
 
-## 검증된 문장 (생성 2026-07-23 · 22/23 재현 성공)
+## 검증된 문장 (생성 2026-07-23 · 22/25 재현 성공)
 
 | 발표에 쓸 수 있는 문장 | 재현값 | 근거 파일 | 성격 |
 |---|---|---|---|
@@ -45,6 +45,8 @@ python analysis/verify_claims.py --scan 발표자료.md   # 금지 수치 유출
 | 전 구간 집중도는 확정 단면보다 크게 높다 - 유효종목수 중앙 3.00 | 전 1498거래일 유효종목수 중앙 3.00 · 상위3 비중 중앙 100.00% · 유효종목수 5 미만 98.1% (2026-07-23 단면은 유효종목수 5.78 - 전 구간 중 가장 분산된 시점) | `analysis/concentration_replication.py` | 실측(전 거래일) |
 | 버킷 밴드 기준점은 개별 캡과 산술적으로 양립하지 않는다(안 C 보류 근거) | 캡 하에서 지속 가능한 앵커 버킷 최대치 = 앵커 2종목 x 30% = 60% · 밴드 기준점(리셋 실현치) [0.4, 0.64, 0.67, 0.85] 중 도달 가능한 회차는 1/13회뿐 - 나머지는 밴드와 캡이 서로를 되돌리는 진동이 된다 | `analysis/bucket_band_turnover.py` | 실측(산술 + 리셋 실현치) |
 | 27/67 근거는 합성 민감도이며 실측에서는 네 정책이 동일하다(버퍼 발동 0건 - 규칙은 1%p 충격에서 분기해 살아 있다) | 합성 다중 seed(11개) 중앙 회전율 none 37.7% -> mid 26.8%(-28.8%) -> wide 20.4% · 실측 네 정책 동일(예) 버퍼 발동 0건 · 반증 1%p 충격에서 정책 분기(예) | `docs/buffer_policy_canonical_20260731.md` | 합성(다중 seed) + 실측 + 반증 |
+| [FAIL] 사용 금지: 규칙 C 없이는 지수 산출 자체가 불가능하고, 월간 캡은 수익을 올리며 위험을 악화시킨다(층별 ablation · 위원회 상정 사안) | 재현 중 예외: FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\paenco0313\\AI_quant_level3_repo\\AI_quant_level3_repo\\out\\backtest\\ablation_cumulative.csv' | `analysis/ablation_study.py` | 실측(층별 재생) |
+| [FAIL] 사용 금지: 사전 정의 시장 구간별로 재현되며 긴축 구간에서는 손실이다(하락장 방어 안 됨 · 포착률은 비대칭) | 재현 중 예외: FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\paenco0313\\AI_quant_level3_repo\\AI_quant_level3_repo\\out\\backtest\\regime_calendar.csv' | `analysis/regime_robustness.py` | 실측(외부 사건 기준 구간) |
 | 고정 % 상한은 ADV에 따라 소요일수가 수십 배 달라져 안전장치가 못 된다 | AUM 3,000억 · 참여율 10% 기준 - ADV 15억 100.0일 · 45억 33.3일 · 500억 3.0일 | `analysis/capacity_v2.py` | 산식 실측(가정 ADV) |
 | 오늘 판정값을 과거에 복사하면 편출입이 0이 되어 버퍼 비교가 불가능하다 | FROZEN {0} (4개 정책 동일) vs PIT 30~61회 (정책별 상이) - 합성 시나리오 | `analysis/demo_why_pit.py` | 구조 논증(합성 시나리오) |
 | PIT 규율은 형식이 아니라 실제 편입 결과를 바꾼다 | 동일 종목이 2020년 미편입 -> 2022년 편입 (근거 사업연도 변경) | `tests/test_pit_snapshots.py` | 실측(단위 검증) |
@@ -55,7 +57,7 @@ python analysis/verify_claims.py --scan 발표자료.md   # 금지 수치 유출
 | 생존편향은 소멸 종목 전수 조사로 후보 0건이 확인됐다(크기는 미측정) | 심사 13시점 전 시장 소멸 382건 전수 조사 · 반도체지수 편입 이력 보유 0건(직전 기준 0건) · 판정 대상 후보 0건 - 크기는 미측정 | `evidence/survivorship/` | 실측(상장 명단 대조) |
 | PR/TR 병기가 가능하며 배당 기여도는 재현된다(배당락일 근사 의존) | 연환산 배당 기여도 1.5965%p · 배당 151건/30종목 · MDD 구간 내 배당락일 0일이라 PR·TR MDD 일치 (가정: 배당락일=12월 마지막 거래일 · 연간 DPS 일괄 반영 - 보조 비교 전용) | `out/backtest_tr/index_level_pr_tr.csv` | 실측(가정 명시 · 보조 비교) |
 | 실측 ADV60 기준 정기변경 소화 일수가 리밸런싱 주기에 육박한다 | AUM 3,000억·참여율 10% 기준 최대 소요 91.3거래일 (112290 · |Δw| 27.3% · ADV60 90억 · 함의상한 1.49%) · ADV60 실측 33종목 (2026-07-23 1시점 - 시계열 아님 · 정기·캡만 반영) | `data/adv60.csv` | 실측(ADV60 1시점 · 정기·캡) |
-| [FAIL] 사용 금지: 전 테스트 스위트가 통과한다 | 24/25 파일 통과 · 개별 케이스 합계 139 | `tests/run_all.py` | 실측(실행) |
+| [FAIL] 사용 금지: 전 테스트 스위트가 통과한다 | 28/30 파일 통과 · 개별 케이스 합계 134 | `tests/run_all.py` | 실측(실행) |
 | 실측 백테스트 산출물은 지표 재계산·입력 계보와 자기일관적으로 재현된다 | 재계산 5지표 유한·정합 - 수치는 FINAL 게이트(D1·D2·D3·판정 추인 2건) 통과 후 공개 · 원장 해시 일치 · 스냅샷 커밋 6b3e8b6 | `out/backtest/index_level.csv` | 실측(산출물 자기검증) |
 
 **인용 금지 (미등록 수치)**

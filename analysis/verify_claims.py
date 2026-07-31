@@ -733,6 +733,70 @@ def c_buffer_policy_canonical():
                 f"반증 1%p 충격에서 정책 분기({'예' if split else '아니오'})")
 
 
+def c_ablation_layers():
+    """규칙 층을 하나씩 켰을 때 각 층이 실제로 무엇을 하는가.
+
+    세 사실을 함께 봉인한다 - 따로 인용하면 오독된다.
+      (1) 규칙 C(위성군) 없이는 표본 앞 구간을 **산출조차 못 한다**
+          (2023년까지 노출도 30% 통과 종목 0개 · 비앵커 0종목은 60% 배분 불가)
+      (2) 버퍼 층의 차이가 **0** 이다(발동 0건과 일관)
+      (3) 월간 캡이 CAGR 을 크게 **올린다** - 리스크 통제 장치인데 수익
+          기여가 크고 MDD 는 악화된다. 도입 취지와 반대 방향이므로
+          성과로 주장하지 않고 사실로만 보고한다.
+    """
+    import pandas as pd
+    cum = pd.read_csv(os.path.join(_BT_DIR, "ablation_cumulative.csv"))
+    loo = pd.read_csv(os.path.join(_BT_DIR, "ablation_leave_one_out.csv"))
+    infeasible = cum[cum["CAGR"].isna()]["구성"].tolist()
+    ok = cum[cum["CAGR"].notna()].reset_index(drop=True)
+    if len(ok) < 3 or len(infeasible) < 2:
+        return False, f"층 구성이 예상과 다르다 (산출가능 {len(ok)} · 불가 {len(infeasible)})"
+    buf = float(ok.iloc[2]["CAGR"] - ok.iloc[1]["CAGR"])      # ④ - ③
+    cap = float(ok.iloc[2]["CAGR"] - ok.iloc[1]["CAGR"])
+    # ④(버퍼) - ③(규칙C) 는 0, ⑤(캡) - ④ 가 캡 효과
+    buf = float(ok.iloc[1]["CAGR"] - ok.iloc[0]["CAGR"])
+    cap = float(ok.iloc[2]["CAGR"] - ok.iloc[1]["CAGR"])
+    d_mdd = float(ok.iloc[2]["MDD"] - ok.iloc[1]["MDD"])
+    no_c = loo[loo["구성"].str.contains("규칙 C")]
+    c_blocks = bool(len(no_c) and pd.isna(no_c.iloc[0]["CAGR"]))
+    ok_all = (len(infeasible) >= 2 and abs(buf) < 1e-9 and cap > 0.05
+              and d_mdd < 0 and c_blocks)
+    return ok_all, (f"규칙 0·A 만으로는 산출 불가({len(infeasible)}개 층) · "
+                    f"버퍼 층 CAGR 차이 {buf:+.4%}p · "
+                    f"캡 층 CAGR {cap:+.2%}p · MDD {d_mdd:+.2%}p "
+                    f"(캡은 수익을 올리고 위험은 악화시킨다)")
+
+
+def c_regime_robustness():
+    """구간을 나눠도 결론이 유지되는가 - 그리고 하락장은 방어되지 않는다.
+
+    구간 경계는 외부 거시 사건으로 **사전 정의**했고 우리 지수 성과를 보고
+    자르지 않았다(`regime_robustness.CALENDAR_REGIMES` 상수).
+
+    이 클레임이 PASS 라는 것은 "모든 구간에서 좋았다"가 아니라 **"긴축
+    구간의 손실을 포함해 구간별 수치가 재현된다"**는 뜻이다. 유리한 구간만
+    인용하지 않기 위해 손실 구간의 존재를 조건에 넣는다.
+    """
+    import pandas as pd
+    cal = pd.read_csv(os.path.join(_BT_DIR, "regime_calendar.csv"))
+    cap = pd.read_csv(os.path.join(_BT_DIR, "regime_capture.csv"))
+    seg = cal[cal["구간"] != "전 구간"]
+    losers = seg[seg["기간수익률"] < 0]
+    if len(seg) < 3:
+        return False, f"구간이 {len(seg)}개뿐 - 사전 정의 목록을 확인할 것"
+    if len(losers) == 0:
+        return False, ("손실 구간이 하나도 없다 - 구간 정의가 유리하게 "
+                       "잘렸는지 확인할 것")
+    up = cap[cap["구분"].str.contains("상승")].iloc[0]
+    dn = cap[cap["구분"].str.contains("하락")].iloc[0]
+    asym = float(dn["포착률"]) < float(up["포착률"])
+    worst = losers.sort_values("기간수익률").iloc[0]
+    return True, (f"사전 정의 {len(seg)}구간 · 손실 구간 {len(losers)}개 "
+                  f"(최악 {worst['구간'][:12]} {worst['기간수익률']:.1%}) · "
+                  f"포착률 상승 {up['포착률']:.3f} / 하락 {dn['포착률']:.3f}"
+                  f"{' (비대칭 유리)' if asym else ' (비대칭 불리)'}")
+
+
 CLAIMS = [
     ("기준일 2020-06-15는 임의 상수가 아니라 3장 일정 조문의 산출값이다",
      c_base_date, "analysis/index_calendar.py", "실측(조문 재생)"),
@@ -766,6 +830,13 @@ CLAIMS = [
      "(버퍼 발동 0건 - 규칙은 1%p 충격에서 분기해 살아 있다)",
      c_buffer_policy_canonical, "docs/buffer_policy_canonical_20260731.md",
      "합성(다중 seed) + 실측 + 반증"),
+    ("규칙 C 없이는 지수 산출 자체가 불가능하고, 월간 캡은 수익을 올리며 위험을 악화시킨다"
+     "(층별 ablation · 위원회 상정 사안)",
+     c_ablation_layers, "analysis/ablation_study.py", "실측(층별 재생)"),
+    ("사전 정의 시장 구간별로 재현되며 긴축 구간에서는 손실이다"
+     "(하락장 방어 안 됨 · 포착률은 비대칭)",
+     c_regime_robustness, "analysis/regime_robustness.py",
+     "실측(외부 사건 기준 구간)"),
     ("고정 % 상한은 ADV에 따라 소요일수가 수십 배 달라져 안전장치가 못 된다",
      c_capacity_inverse, "analysis/capacity_v2.py", "산식 실측(가정 ADV)"),
     ("오늘 판정값을 과거에 복사하면 편출입이 0이 되어 버퍼 비교가 불가능하다",

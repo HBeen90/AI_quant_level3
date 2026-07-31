@@ -685,6 +685,54 @@ def c_pit_recollection():
                 + (f" {sorted(extra)}" if extra else ""))
 
 
+def c_buffer_policy_canonical():
+    """27/67 근거가 '합성 민감도 + 실측 무차이 + 반증 생존' 세 겹으로 성립하는가.
+
+    이 셋은 **한 묶음**이다. 앞만 인용하면 실측(policy_comparison.csv)과
+    충돌하고, 가운데만 인용하면 규칙이 죽은 것처럼 들린다. 그래서 하나의
+    클레임으로 봉인한다 - 셋 중 하나라도 깨지면 발표 문장 전체가 무효다.
+
+    정본은 **다중 seed 중앙값**이다. 단일 seed 는 seed 변동 범위 안의 한
+    점일 뿐이므로 인용하지 않는다(문서 buffer_policy_canonical_20260731.md).
+    """
+    import pandas as pd
+    order = ["none", "narrow", "mid", "wide"]
+
+    # (1) 합성 민감도 - 다중 seed 중앙값
+    syn = pd.read_csv(os.path.join(HERE, "analysis",
+                                   "buffer_policy_sensitivity_v2.csv"))
+    if syn["seed"].nunique() < 5:
+        return False, f"seed 수 {syn['seed'].nunique()} - 단일·소수 seed 는 정본이 아니다"
+    med = syn.groupby("정책")["연율화 회전율"].median().reindex(order)
+    drop = med["mid"] / med["none"] - 1.0
+    mono = bool(med.is_monotonic_decreasing)
+
+    # (2) 실측 - 네 정책이 동일하고 버퍼 발동 0
+    real = pd.read_csv(os.path.join(_BT_DIR, "policy_comparison.csv"),
+                       index_col=0)
+    tno = real["연율화회전율(편도)"].astype(float)
+    same = float(tno.max() - tno.min()) < 1e-12
+    fired = int(pd.to_numeric(real.get("버퍼발동 건수", 0),
+                              errors="coerce").fillna(0).sum())
+
+    # (3) 반증 - 1%p 충격에서 정책이 갈라진다
+    fal = pd.read_csv(os.path.join(_BT_DIR, "buffer_falsification.csv"))
+    hit = fal[pd.to_numeric(fal.iloc[:, 0], errors="coerce").eq(1.0)]
+    split = False
+    if len(hit):
+        r = hit.iloc[0]
+        split = (int(r.get("none 발동", 0)) == 0
+                 and int(r.get("mid 발동", 0)) >= 1)
+
+    ok = mono and same and fired == 0 and split
+    return ok, (f"합성 다중 seed({syn['seed'].nunique()}개) 중앙 회전율 "
+                f"none {med['none']:.1%} -> mid {med['mid']:.1%}({drop:+.1%}) "
+                f"-> wide {med['wide']:.1%} · "
+                f"실측 네 정책 동일({'예' if same else '아니오'}) "
+                f"버퍼 발동 {fired}건 · "
+                f"반증 1%p 충격에서 정책 분기({'예' if split else '아니오'})")
+
+
 CLAIMS = [
     ("기준일 2020-06-15는 임의 상수가 아니라 3장 일정 조문의 산출값이다",
      c_base_date, "analysis/index_calendar.py", "실측(조문 재생)"),
@@ -714,6 +762,10 @@ CLAIMS = [
     ("버킷 밴드 기준점은 개별 캡과 산술적으로 양립하지 않는다(안 C 보류 근거)",
      c_band_infeasible_with_cap, "analysis/bucket_band_turnover.py",
      "실측(산술 + 리셋 실현치)"),
+    ("27/67 근거는 합성 민감도이며 실측에서는 네 정책이 동일하다"
+     "(버퍼 발동 0건 - 규칙은 1%p 충격에서 분기해 살아 있다)",
+     c_buffer_policy_canonical, "docs/buffer_policy_canonical_20260731.md",
+     "합성(다중 seed) + 실측 + 반증"),
     ("고정 % 상한은 ADV에 따라 소요일수가 수십 배 달라져 안전장치가 못 된다",
      c_capacity_inverse, "analysis/capacity_v2.py", "산식 실측(가정 ADV)"),
     ("오늘 판정값을 과거에 복사하면 편출입이 0이 되어 버퍼 비교가 불가능하다",

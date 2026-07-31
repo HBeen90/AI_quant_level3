@@ -18,6 +18,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import platform
 import subprocess
 import sys
@@ -46,6 +47,68 @@ def _git_head() -> str | None:
         return out.stdout.strip() or None
     except Exception:
         return None
+
+
+#: 스냅샷 재현성에 실제로 영향을 주는 코드 경로.
+#:
+#: 왜 전체 코드가 아니라 이 셋인가 - `build_pit_snapshots.py` 는 프로젝트
+#: 모듈 중 `analysis.index_calendar` 하나만 import 한다(나머지는 stdlib·
+#: numpy·pandas·pykrx). 따라서 다른 파일이 바뀌어도 같은 입력에서 같은
+#: 스냅샷이 나온다. 전체 코드 동일성을 요구하면 스냅샷과 무관한 분석
+#: 스크립트 하나만 추가해도 재생성을 강제하게 되고, 그 재생성은 KRX
+#: 접근을 요구한다.
+#:
+#: 이는 `verify_claims._code_changed_between` 이 '커밋 동일'에서 '코드
+#: 무변경'으로 옮겨간 것과 같은 교훈이며, 그 판정이 이쪽에는 적용되지
+#: 않은 채 남아 있었다.
+_SNAPSHOT_CODE_PATHS = ("analysis/build_pit_snapshots.py",
+                        "analysis/index_calendar.py",
+                        "requirements.txt")
+
+#: 위 경로 집합이 유효하려면 스냅샷 생성기의 프로젝트 의존이 이 목록에
+#: 한정돼야 한다. 새 의존이 생기면 가정이 깨지므로 넓은 판정으로 되돌린다.
+_SNAPSHOT_ALLOWED_IMPORTS = {"analysis.index_calendar"}
+_PROJECT_IMPORT_RE = re.compile(
+    r"^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))", re.MULTILINE)
+
+
+def _snapshot_deps_are_declared() -> bool:
+    """스냅샷 생성기의 프로젝트 의존이 선언 목록 안에 있는가.
+
+    가정이 조용히 낡는 것을 막는다. 실제로 이 검사가 초기 구현의 오류를
+    잡았다 - `# noqa` 주석이 달린 import 한 줄이 육안 검토에서 누락됐고,
+    그 결과 좁힌 경로 집합이 틀렸다.
+    """
+    try:
+        src = open(os.path.join(HERE, "analysis", "build_pit_snapshots.py"),
+                   encoding="utf-8").read()
+    except Exception:
+        return False
+    for m in _PROJECT_IMPORT_RE.finditer(src):
+        mod = m.group(1) or m.group(2) or ""
+        root = mod.split(".")[0]
+        if root in {"src", "backtest", "analysis"} \
+                and mod not in _SNAPSHOT_ALLOWED_IMPORTS:
+            return False
+    return True
+
+
+def _snapshot_code_changed(a: str, b: str) -> bool:
+    """스냅샷 생성 경로가 두 커밋 사이에 바뀌었는가. 확인 불가면 True(fail-closed)."""
+    if not a or not b:
+        return True
+    if a == b:
+        return False
+    paths = (_SNAPSHOT_CODE_PATHS if _snapshot_deps_are_declared()
+             else ("src", "backtest", "analysis", "requirements.txt"))
+    try:
+        r = subprocess.run(["git", "diff", "--name-only", a, b, "--", *paths],
+                           cwd=HERE, capture_output=True, text=True, timeout=20)
+    except Exception:
+        return True
+    if r.returncode != 0:
+        return True
+    return bool(r.stdout.strip())
 
 
 def load_gates(path: str) -> dict:
@@ -108,10 +171,11 @@ def build(out_dir: str, snapshots_dir: str, ledger: str, prices_cache: str,
         if not current_head:
             raise ValueError("현재 Git HEAD를 확인할 수 없음")
         snapshot_commit = next(iter(commits))
-        if snapshot_commit != current_head:
+        if _snapshot_code_changed(snapshot_commit, current_head):
             raise ValueError(
-                f"스냅샷 code_commit({snapshot_commit})이 현재 HEAD"
-                f"({current_head})와 불일치 - 스냅샷을 재생성할 것")
+                f"스냅샷 code_commit({snapshot_commit}) 이후 스냅샷 생성 코드가"
+                f" 바뀌었다(현재 HEAD {current_head}) - 스냅샷을 재생성할 것."
+                f" 대상 경로: {', '.join(_SNAPSHOT_CODE_PATHS)}")
 
     def _ver(mod):
         try:

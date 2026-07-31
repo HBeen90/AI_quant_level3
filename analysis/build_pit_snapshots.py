@@ -265,14 +265,17 @@ def to_snapshot(j: pd.DataFrame) -> pd.DataFrame:
         "exposure": j["hbm_exposure"], "mem_ratio": j["mem_ratio"],
         "float_mcap": j["market_cap"] * j["free_float"],
         "eligible": j["eligible"].astype(bool),
-        # 위성 하드요건은 eligible 에 접어 넣는다(공정·위원회 미확인 = 자격 없음)
+        # 위성 하드요건(규칙 C 요건②③)은 eligible 에 접어 넣는다.
+        # 주의: 미충족은 **판정 결과**이지 판정 미수행이 아니다 -
+        # 해당 행의 judgment_status 는 FINAL 이다. 사유 문자열이
+        # "미확인"이면 감사자가 "판정을 안 했다"로 오독한다(실제 발생).
         "탈락사유": j["탈락사유"],
     })
     sat = out["group"].eq("satellite")
     hard = sat & ~(j["process_confirmed"].fillna(False)
                    & j["committee_ok"].fillna(False))
     out.loc[hard, "eligible"] = False
-    out.loc[hard, "탈락사유"] = (out.loc[hard, "탈락사유"] + ";공정/위원회 미확인") \
+    out.loc[hard, "탈락사유"] = (out.loc[hard, "탈락사유"] + ";규칙 C 요건②③ 미충족") \
         .str.strip(";")
     out["float_mcap"] = out["float_mcap"].fillna(0.0)
     out.loc[~out["eligible"] & (out["float_mcap"] <= 0), "float_mcap"] = 1.0

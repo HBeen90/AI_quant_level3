@@ -92,6 +92,20 @@ if PAGE.startswith("①"):
     st.title("파이프라인 상태")
     st.caption("무엇이 끝났고 무엇이 비어 있는가 - 한 화면 요약")
 
+    # 상태를 하드코딩하지 않는다. 이 화면이 몇 세대 전 상태를 보여준 적이
+    # 있어(판정 원장 1/13회분·진행 8%) 발표에서 그대로 뜰 뻔했다.
+    # 산출물에서 세면 낡지 않는다.
+    def _count(pat):
+        import glob
+        return len(glob.glob(os.path.join(HERE, pat)))
+
+    def _exists(rel):
+        return os.path.exists(os.path.join(HERE, rel))
+
+    n_snap = _count("data/snapshots/snapshot_*.csv")
+    ledger_pct = min(100, int(round(n_snap / 13 * 100))) if n_snap else 0
+    ledger_state = f"{n_snap}/13회분" if n_snap < 13 else "13/13 완료"
+
     steps = pd.DataFrame([
         ("universe.py", "기초 유니버스 필터", "임효빈", "빈 파일", 0),
         ("selection.py", "규칙 0/A/C 판정", "노민수", "완료", 100),
@@ -99,36 +113,57 @@ if PAGE.startswith("①"):
         ("rebalance.py", "히스테리시스·수시변경", "김소연", "완료", 100),
         ("backtest.py", "이벤트 스케줄·지표", "김소연", "완료", 100),
         ("index_calc.py", "IIF·제수·TR", "김인서", "동치 1e-15", 100),
-        ("판정 원장(PIT)", "시점별 심사 스냅샷", "팀", "1/13회분", 8),
+        ("판정 원장(PIT)", "시점별 심사 스냅샷", "팀", ledger_state, ledger_pct),
     ], columns=["모듈", "역할", "담당", "상태", "진행"])
     st.dataframe(steps, use_container_width=True, hide_index=True,
                  column_config={"진행": st.column_config.ProgressColumn(
                      "진행", min_value=0, max_value=100, format="%d%%")})
 
     st.subheader("병목")
-    st.warning(
-        "**PIT 심사 스냅샷이 1회분(2026-07-23)뿐입니다.** 이 하나가 세 가지를 "
-        "동시에 막고 있습니다 - ① 방법론 3장 성과 보고 "
-        "② selection 순방향 재생(33→7) ③ 실측 회전율 기반 용량.\n\n"
-        "`②`·`③` 화면은 데이터 없이도 동작하니 먼저 확인하시고, "
-        "판정 원장이 채워지면 `④`~`⑥`이 켜집니다.")
+    if n_snap < 13:
+        st.warning(
+            f"**PIT 심사 스냅샷이 {n_snap}회분뿐입니다.** 성과 보고·순방향 "
+            "재생·실측 용량이 함께 막혀 있습니다.")
+    else:
+        st.success(
+            "**PIT 심사 스냅샷 13회분이 채워졌습니다.** 성과·회전율·벤치마크 "
+            "수치가 해제됐고, 계보 등급은 `METADATA_VERIFIED`입니다"
+            "(DART 원문 215건 독립 재수집 전수 일치).\n\n"
+            "남은 병목은 데이터가 아니라 **문서-구현 정합**입니다 - "
+            "아래 미결 표 참조.")
 
     c1, c2, c3 = st.columns(3)
     c1.metric("회귀 테스트", "자동화됨", "tests/run_all.py")
     c2.metric("지수 산출 동치성", "2.6e-15", "TR 포함")
-    c3.metric("필요한 스냅샷", "13회", "-12회")
+    c3.metric("PIT 스냅샷", f"{n_snap}회", f"{n_snap - 13:+d}회")
 
     st.subheader("미결 항목")
-    st.dataframe(pd.DataFrame([
-        ("27/67 사후 점검", "최소 2회차 실측 미축적", "PIT 스냅샷"),
-        ("성과 보고 수치", "지수 시계열 없음", "PIT 스냅샷"),
-        ("selection 순방향 재생", "판정 스냅샷 없음", "PIT 스냅샷"),
-        ("배당 TR 계열", "배당 데이터 없음", "DART 배당결정 공시"),
-        ("생존편향 대조", "폐지·피합병 명단 미확보", "KRX 상장폐지 DB"),
+    open_items = [
         ("유동비율 원천 단일화", "DART 기준 사용 중", "KRX 공식 유동비율"),
-        ("버킷 드리프트 점검", "조문에 없음(개별 캡만 존재)", "위원회 상정"),
-    ], columns=["미결", "왜 못 닫는가", "필요한 것"]),
-        use_container_width=True, hide_index=True)
+        ("방법론 규칙 3(위성군) 조문", "3요건이 코드에만 있음",
+         "docs/rule_c_clause_draft_20260731.md 의결"),
+        ("방법론 벤치마크 조항", "문서에 '벤치마크' 0건",
+         "docs/benchmark_chapter_draft_20260731.md 의결"),
+        ("40/60 버킷 규정", "13회 중 1회만 실현", "안 A 또는 B 의결"),
+        ("후보발굴 운영 실행", "동결 CSV 없음",
+         "candidate_discovery.py --discover"),
+    ]
+    if not _exists("out/backtest/rule_c_sensitivity.csv"):
+        open_items.append(("규칙 C 기여도 실측", "미실행",
+                           "rule_c_sensitivity.py"))
+    st.dataframe(pd.DataFrame(open_items,
+                              columns=["미결", "왜 못 닫는가", "필요한 것"]),
+                 use_container_width=True, hide_index=True)
+
+    st.subheader("해소된 항목 (2026-07-31)")
+    st.dataframe(pd.DataFrame([
+        ("PIT 판정 원장", "215행 · 33종목 · FY2019~2025"),
+        ("계보 검증", "L09_PARTIAL → METADATA_VERIFIED (불일치 0건)"),
+        ("성과 보고 수치", "FINAL 게이트 통과 · 인용 가능"),
+        ("생존편향 대조", "소멸 종목 382건 전수 · 후보 0건"),
+        ("버킷 드리프트 점검", "실측 완료 · 안 C 는 캡과 양립 불가로 보류"),
+        ("버퍼 27/67 근거", "정본 확정 (다중 seed) · 실측 무차이 병기"),
+    ], columns=["항목", "결과"]), use_container_width=True, hide_index=True)
 
 # ==========================================================================
 elif PAGE.startswith("②"):

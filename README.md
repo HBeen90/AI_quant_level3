@@ -276,7 +276,10 @@ python analysis\build_pit_snapshots.py --ledger data\verdict_ledger.csv --out da
 
 `data/benchmark.yaml`은 PR/TR별 실제 코드·정확한 표기명·확정일·결의
 근거가 모두 채워질 때만 `CONFIRMED`로 바꾼다. 그 전의 이름 검색 결과와
-상관계수·추적오차는 잠정 수치다. `--mode both`는 PR과 TR 벤치마크를
+상관계수·추적오차는 잠정 수치다.
+**현재는 KRX 반도체 PR(코드 5044 · 확정일 2026-07-30)로 `CONFIRMED` 이며
+상관계수·추적오차는 공식 수치다.** TR 계열은 KRX 미공표로 후보 4건 전수
+조회 후 보조 비교를 생략했다(`[ABSENT]`). `--mode both`는 PR과 TR 벤치마크를
 각각 조회하며 캐시도 `*_pr.csv`, `*_tr.csv`로 분리한다. 헤드라인은 PR이고
 TR은 실제 공통 관측기간의 보조 결과다. 확정 근거와 남은 절차는
 `docs/benchmark_confirmation_memo.md`에 정리했다.

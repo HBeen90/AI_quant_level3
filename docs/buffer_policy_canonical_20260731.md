@@ -1,6 +1,6 @@
 # 버퍼 정책(27/67) 근거 — 정본 확정
 
-- 작성: 김소연 (파트4)
+- 작성: 김소연 (파트3)
 - 작성일: 2026-07-31
 - 재현: `analysis/sensitivity_v2.py` · `out/backtest/policy_comparison.csv` ·
   `out/backtest/buffer_falsification.csv`

@@ -184,7 +184,17 @@ def market_facts(tickers: list, asof: pd.Timestamp) -> pd.DataFrame:
     ymd = pd.Timestamp(asof).strftime("%Y%m%d")
     cap = stock.get_market_cap(ymd, market="ALL")
     if cap is None or cap.empty:
-        sys.exit(f"[FAIL] {ymd} 시가총액 미수신 (휴장일?)")
+        sys.exit(f"[FAIL] {ymd} 시가총액 미수신 (휴장일 또는 KRX 접근 실패)")
+    # KRX 가 JSON 대신 HTML(로그인/차단 안내)을 돌려주면 pykrx 는 예외를
+    # 삼키고 빈·부분 결과를 준다. 그 결과를 그대로 쓰면 시총 0 인 종목이
+    # 대량 발생하고, 기초 필터가 그것을 "소형주 탈락"으로 처리해
+    # **조용히 오염된 스냅샷**이 만들어진다(2026-07-31 실제 발생).
+    bad_cap = (~np.isfinite(cap["시가총액"].astype(float))) \
+        | (cap["시가총액"].astype(float) <= 0)
+    if float(bad_cap.mean()) > 0.05:
+        sys.exit(f"[FAIL] {ymd} 시가총액이 비정상입니다 - 전체 {len(cap)}종목 중 "
+                 f"{int(bad_cap.sum())}종목이 결측·0. KRX 접근 상태를 확인하십시오"
+                 " (조회 실패를 소형주 탈락으로 오인하면 스냅샷이 오염됩니다).")
     cap.index = [str(i).zfill(6) for i in cap.index]
     cap["시총순위"] = cap["시가총액"].rank(ascending=False, method="min")
 
@@ -203,21 +213,36 @@ def market_facts(tickers: list, asof: pd.Timestamp) -> pd.DataFrame:
         # 기존과 동일하며 원천 통계(KRX)도 같다.
         rng = stock.get_market_cap(adv_start, ymd, t)
         if rng is None or rng.empty:
-            rows.append({"ticker": t, "listed": False})
-            continue
+            # 이 지점에 도달했다는 것은 t 가 위 전체 시장 조회에 **존재**한다는
+            # 뜻이다(없으면 앞에서 listed=False 로 빠졌다). 즉 상장 종목인데
+            # 시계열만 비었다 - 미상장이 아니라 조회 실패다. 이를 미상장으로
+            # 기록하면 실패가 탈락으로 둔갑한다.
+            sys.exit(f"[FAIL] {t} 시가총액 시계열 조회 실패 - 해당 종목은 {ymd} "
+                     "전체 시장 조회에 존재하므로 미상장이 아닙니다. KRX 접근 "
+                     "상태를 확인하고 재실행하십시오(부분 산출물은 폐기).")
         if "거래대금" not in rng.columns:
             sys.exit(f"[FAIL] {t} 시가총액 시계열에 거래대금 컬럼 없음 - "
                      "pykrx 버전 확인 (pip install -U pykrx)")
         adv = float(rng["거래대금"].tail(ADV_DAYS).mean())
         first = stock.get_market_ohlcv("19950101", ymd, t, freq="m")
-        listed_days = ((pd.Timestamp(asof) - pd.Timestamp(first.index[0])).days
-                       if first is not None and len(first) else np.nan)
+        if first is None or len(first) == 0:
+            sys.exit(f"[FAIL] {t} 상장 이력 조회 실패 - 상장경과일을 확인할 수 "
+                     "없습니다. NaN 으로 두면 상장 3개월 요건이 조용히 통과됩니다.")
+        listed_days = (pd.Timestamp(asof) - pd.Timestamp(first.index[0])).days
         rows.append({"ticker": t, "listed": True,
                      "close": float(cap.loc[t, "종가"]),
                      "market_cap": float(cap.loc[t, "시가총액"]),
                      "mcap_rank": float(cap.loc[t, "시총순위"]),
                      "adv60": adv, "listed_days": listed_days})
-    return pd.DataFrame(rows).set_index("ticker")
+    out = pd.DataFrame(rows).set_index("ticker")
+    live = out[out["listed"].astype(bool)] if "listed" in out.columns else out
+    if len(live):
+        mc = pd.to_numeric(live.get("market_cap"), errors="coerce")
+        bad = mc.isna() | (mc <= 0)
+        if bad.any():
+            sys.exit(f"[FAIL] 상장 종목 중 시총 결측·비양수: "
+                     f"{sorted(live.index[bad])} - 조회 실패 가능성. 중단합니다.")
+    return out
 
 
 def screen(facts: pd.DataFrame, led: pd.DataFrame) -> pd.DataFrame:

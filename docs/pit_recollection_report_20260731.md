@@ -1,7 +1,7 @@
 # PIT 판정원장 독립 재수집 대조 보고 — L09 승격
 
 - 수행일: 2026-07-31
-- 수행: 김소연 (파트4) · 절차적 독립
+- 수행: 김소연 (파트3) · 절차적 독립
 - 도구: `analysis/recollect_pit_evidence.py`
 - 증거: `evidence/recollect_20260731/`
 - 판정: `L09_PARTIAL` → **`METADATA_VERIFIED`**

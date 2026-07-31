@@ -148,7 +148,8 @@ if PAGE.startswith("①"):
     ledger_state = f"{n_snap}/13회분" if n_snap < 13 else "13/13 완료"
 
     steps = pd.DataFrame([
-        ("universe.py", "기초 유니버스 필터", "임효빈", "빈 파일", 0),
+        ("기초 유니버스 필터", "시총·ADV·상장경과·유동비율",
+         "임효빈 → 파트3 이관", "build_pit_snapshots.screen()", 100),
         ("selection.py", "규칙 0/A/C 판정", "노민수", "완료", 100),
         ("weighting.py", "40/60 배분·상한·IIF", "노민수", "완료", 100),
         ("rebalance.py", "히스테리시스·수시변경", "김소연", "완료", 100),
@@ -159,6 +160,14 @@ if PAGE.startswith("①"):
     st.dataframe(steps, use_container_width=True, hide_index=True,
                  column_config={"진행": st.column_config.ProgressColumn(
                      "진행", min_value=0, max_value=100, format="%d%%")})
+
+    st.caption(
+        "기초 유니버스 필터는 `src/universe.py` 가 아니라 "
+        "`analysis/build_pit_snapshots.py:screen()` 에 있다. 필터가 "
+        "**심사시점의 시장 데이터**(그 날의 시총·거래대금)를 요구하므로 "
+        "스냅샷 생성과 같은 자리에서 돌아야 한다. `src/universe.py` 는 "
+        "빈 파일이며 도식상의 자리만 남아 있다 - 파이프라인 그림을 볼 때 "
+        "유의할 것.")
 
     st.subheader("병목")
     if n_snap < 13:
@@ -468,7 +477,11 @@ elif PAGE.startswith("⑤"):
             "절차(7.3)에서만 사후 검토 자료로 사용합니다.")
         st.stop()
 
-    d = tbl.reset_index().rename(columns={"index": "정책"})
+    # 인덱스 이름을 가정하지 않는다(⑥ 화면과 같은 유형). 지금은 이름이
+    # 없어 "index" 로 나오지만, 산출물이 이름 있는 인덱스로 재생성되면
+    # rename 이 조용히 실패하고 "정책" 열이 없는 채로 흘러간다.
+    d = tbl.reset_index()
+    d = d.rename(columns={d.columns[0]: "정책"})
 
     NEED = {"연율화회전율(편도)", "편입 건수", "편출 건수", "CAGR(30bp)",
             "평균 종목수"}
@@ -540,7 +553,11 @@ else:
             "위험합니다).")
         st.stop()
 
-    long = d.reset_index().melt("index", var_name="계열", value_name="지수")
+    # 인덱스 이름을 가정하지 않는다. 저장 시점에 따라 "index" 일 수도
+    # "날짜" 일 수도 있는데, 이름으로 melt 하면 KeyError 로 화면이 죽는다
+    # (2026-08-01 실제 발생 - 경로를 고쳐 파일을 찾자 이 지점에서 걸렸다).
+    flat = d.reset_index()
+    long = flat.melt(flat.columns[0], var_name="계열", value_name="지수")
     long.columns = ["date", "계열", "지수"]
     ch = alt.Chart(long).mark_line(strokeWidth=2).encode(
         x=alt.X("date:T", title=None),

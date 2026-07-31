@@ -68,14 +68,48 @@ st.sidebar.caption("④~⑥은 `run_backtest.py` 실행 후 활성화됩니다.\
                    "①~③은 데이터 없이 동작합니다.")
 
 
+def _candidate_dirs() -> list:
+    """산출물이 있을 수 있는 폴더.
+
+    OUTDIR 과 **그 형제 폴더**만 본다. 레포 기본 경로까지 뒤지면, 사용자가
+    없는 폴더를 지정했을 때도 데이터를 찾아내 "데이터 없음" 안내가
+    작동하지 않는다(그 안내는 합성 수치 오용을 막는 장치다).
+
+    PR/TR 병기는 계열이 섞이지 않도록 `out/backtest_tr/` 로 분리 저장되므로
+    형제 폴더까지는 봐야 한다 - 한 곳만 보면 **파일이 있는데도 "없습니다"**
+    라고 표시한다(2026-08-01 실제 발생).
+    """
+    base = os.path.dirname(os.path.abspath(OUTDIR))
+    name = os.path.basename(os.path.abspath(OUTDIR))
+    sibs = [OUTDIR]
+    if name.startswith("backtest"):
+        sibs.append(os.path.join(base, "backtest_tr"))
+    seen, out = set(), []
+    for d in sibs:
+        a = os.path.abspath(d)
+        if a not in seen:
+            seen.add(a)
+            out.append(d)
+    return out
+
+
 def _read(name: str, ts: bool = False) -> pd.DataFrame | None:
     """산출 CSV 로더. ts=True 이면 인덱스를 날짜로 파싱한다.
 
     정책 비교표처럼 인덱스가 문자열인 파일에 parse_dates 를 걸면 조용히
     이상한 인덱스가 만들어지므로 호출부에서 명시한다(fail-closed 승계).
     """
-    p = os.path.join(OUTDIR, name)
-    if not os.path.exists(p):
+    # 산출물이 한 폴더에 있지 않다. PR/TR 병기는 계열이 섞이지 않도록
+    # `out/backtest_tr/` 로 분리해 저장하는데, 화면이 OUTDIR 한 곳만 보면
+    # **파일이 있는데도 "없습니다"** 라고 표시한다(2026-08-01 실제 발생).
+    # 존재하는 곳을 찾는다 - 경로를 화면에 박아 두면 또 낡는다.
+    p = None
+    for d in _candidate_dirs():
+        q = os.path.join(d, name)
+        if os.path.exists(q):
+            p = q
+            break
+    if p is None:
         return None
     df = pd.read_csv(p, index_col=0)
     if ts:
@@ -99,8 +133,15 @@ if PAGE.startswith("①"):
         import glob
         return len(glob.glob(os.path.join(HERE, pat)))
 
-    def _exists(rel):
-        return os.path.exists(os.path.join(HERE, rel))
+    def _exists(name):
+        """산출물 존재 확인. **OUTDIR 기준**으로 본다.
+
+        경로를 "out/backtest/..." 로 박아 두면 사이드바에서 산출 폴더를
+        바꿨을 때 화면이 엉뚱한 곳을 보고 "미실행"이라고 표시한다.
+        같은 유형의 결함이 ⑥ 화면에서 이미 한 번 나왔다.
+        """
+        return any(os.path.exists(os.path.join(d, name))
+                   for d in _candidate_dirs())
 
     n_snap = _count("data/snapshots/snapshot_*.csv")
     ledger_pct = min(100, int(round(n_snap / 13 * 100))) if n_snap else 0
@@ -148,9 +189,20 @@ if PAGE.startswith("①"):
         ("후보발굴 운영 실행", "동결 CSV 없음",
          "candidate_discovery.py --discover"),
     ]
-    if not _exists("out/backtest/rule_c_sensitivity.csv"):
+    if not _exists("rule_c_sensitivity.csv"):
         open_items.append(("규칙 C 기여도 실측", "미실행",
                            "rule_c_sensitivity.py"))
+    for f, label, script in (
+            ("ablation_cumulative.csv", "층별 ablation", "ablation_study.py"),
+            ("regime_calendar.csv", "구간별 robustness", "regime_robustness.py"),
+            ("concentration_daily.csv", "집중도 계량",
+             "concentration_replication.py"),
+            ("bucket_band_turnover.csv", "버킷 밴드 비용",
+             "bucket_band_turnover.py"),
+            ("frequency_sensitivity.csv", "재가중 주기 민감도",
+             "frequency_sensitivity.py")):
+        if not _exists(f):
+            open_items.append((label, "미실행", script))
     st.dataframe(pd.DataFrame(open_items,
                               columns=["미결", "왜 못 닫는가", "필요한 것"]),
                  use_container_width=True, hide_index=True)

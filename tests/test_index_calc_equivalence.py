@@ -10,8 +10,10 @@
 
 허용오차 1e-9 (실측 1e-15 수준). 인서님 코드는 수정 없이 그대로 사용.
 부속: to_reconstitution_events() - 소연 이벤트 -> 인서님 입력 어댑터.
-검증 범위는 정기변경과 무대체 수시편출이다. cap·emergency_fill·주식교부
+검증 범위는 정기변경·무대체 수시편출·월말 캡이다. emergency_fill·주식교부
 합병은 이 테스트가 증명하지 않으며 별도 공동 대조 대상으로 남긴다.
+(2026-08-02: 캡 제수 동치성 대조 A' 를 r11 셀프감사 번들에서 이관 -
+ 엔진은 build_index_series 를 갖추고 있었으나 브랜치에 테스트가 없었다.)
 """
 import os
 import sys
@@ -130,6 +132,51 @@ def test_adhoc_exclusion_equivalence():
     print(f"[OK] 대조 B 수시편출 '정규화 = 제수 흡수' 동치 (최대 상대차 {rel:.2e})")
 
 
+def test_cap_event_divisor_equivalence_and_no_jump():
+    """대조 A': 월말 캡(reason='cap')도 정기와 같은 제수 리셋 경로로
+    소비되어 (1) 수익률 경로와 동치이고 (2) 캡 당일 무점프임을 명시적으로
+    못박는다. 기존 대조 A는 regular 만 덮어, 캡 경로의 제수 조정이 무점프·
+    동치인지가 미검증이었다(자체 감사 P2)."""
+    px = _prices(180)
+    dates = px.index
+    d_cap = dates[90]
+    w0 = pd.Series([.35, .1843, .18, .10, .0557, .0400, .0900], index=CODES)
+    w0 = w0 / w0.sum()
+    # 월말 캡 결과 모사: 005930 을 25%로 눌러 초과분을 나머지에 비례 재배분.
+    capped = w0.copy()
+    over = capped["005930"] - 0.25
+    capped["005930"] = 0.25
+    others = [c for c in CODES if c != "005930"]
+    capped[others] = capped[others] + over * capped[others] / capped[others].sum()
+
+    events = [make_event(dates[0], "regular", w0),
+              make_event(d_cap, "cap", capped)]
+    lv_ret = simulate_index(px, events, base=ic.BASE_INDEX_LEVEL)["level"]
+
+    # 제수 경로: 캡도 reconstitution 으로 소비(ff_mcap 는 레벨에 자유 파라미터 -
+    # calc_iif 가 iif·ff 를 목표비중으로 정규화하므로 임의 양수면 된다).
+    f0 = pd.Series([12405393.9, 10598120.1, 90214.2, 13614.9,
+                    3183.1, 2629.4, 1125.4], index=CODES)
+    recon = [{"date": dates[0], "weights": w0, "ff_mcap": f0},
+             {"date": d_cap, "weights": capped, "ff_mcap": f0}]
+    lv_div = ic.build_index_series(px, recon)["level"]
+
+    common = lv_div.index.intersection(lv_ret.index)
+    rel = float(((lv_div.loc[common] - lv_ret.loc[common]).abs()
+                 / lv_ret.loc[common]).max())
+    assert rel < TOL, f"캡 경로 두 구현 불일치 rel={rel:.2e}"
+
+    # 무점프: 리셋은 종가에 적용되므로 캡 당일 레벨은 캡이 없을 때와 같아야 한다
+    # (당일은 직전 구성의 drift, 캡은 익일부터 효력). 두 경로 모두에서 확인.
+    lv_nocap_ret = simulate_index(px, [make_event(dates[0], "regular", w0)],
+                                  base=ic.BASE_INDEX_LEVEL)["level"]
+    lv_nocap_div = ic.build_index_series(
+        px, [{"date": dates[0], "weights": w0, "ff_mcap": f0}])["level"]
+    assert abs(lv_ret[d_cap] - lv_nocap_ret[d_cap]) < 1e-9, "캡 당일 수익률 경로 점프"
+    assert abs(lv_div[d_cap] - lv_nocap_div[d_cap]) < 1e-9, "캡 당일 제수 경로 점프"
+    print(f"[OK] 대조 A' 캡 제수 리셋 동치·무점프 (최대 상대차 {rel:.2e})")
+
+
 def test_adapter_rejects_missing_fmc():
     """어댑터 fail-closed: 정기변경 일자·종목별 fmc 누락 시 명시적 실패."""
     e = [make_event(pd.Timestamp(ic.BASE_DATE), "regular",
@@ -151,5 +198,6 @@ def test_adapter_rejects_missing_fmc():
 if __name__ == "__main__":
     test_regular_path_equivalence()
     test_adhoc_exclusion_equivalence()
+    test_cap_event_divisor_equivalence_and_no_jump()
     test_adapter_rejects_missing_fmc()
-    print("\n3/3 동치성 공동 대조 통과 - 파트 간 접합 검증 완료")
+    print("\n4/4 동치성 공동 대조 통과 - 파트 간 접합 검증 완료")

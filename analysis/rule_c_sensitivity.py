@@ -64,8 +64,68 @@ from backtest.backtest import (ann_vol, annualized_turnover,  # noqa: E402
                                simulate_index)
 from src.rebalance import SAT, ConfigV2  # noqa: E402
 
-RULE_C_UNMET = "공정/위원회 미확인"      # 현행 표기(오해 소지 - 본문 참조)
+#: 규칙 C 요건②③ 미충족을 뜻하는 탈락사유 표기. **세대가 둘 있다.**
+#:   구: "공정/위원회 미확인"        (오해 소지 - 조문 초안 §2 참조)
+#:   신: "규칙 C 요건②③ 미충족"     (위원회 안건 1-4 로 정정)
+#: 하나만 인식하면, 표기가 바뀐 스냅샷에서 완화 대상을 **하나도 못 찾고도
+#: 죽지 않는다.** 그러면 기여도가 조용히 축소된다 - 2026-08-02 에 실제로
+#: 발생했다(스냅샷 5/13 만 신 표기 -> CAGR 차이 13.50%p 가 8.04%p 로 붕괴).
+#: 표기 하나가 감사 결론을 바꾼다는 조문 초안의 경고가 이 도구 자신에게
+#: 일어난 사례이므로, 목록으로 두고 미인식 표기는 fail-closed 한다.
+RULE_C_UNMET_LABELS = (
+    "공정/위원회 미확인",
+    "규칙 C 요건②③ 미충족",
+)
+RULE_C_UNMET = RULE_C_UNMET_LABELS[0]        # 하위호환(구 표기 참조용)
 SAT_MEM_TH = 0.70
+
+
+def _unmet_mask(frame) -> "pd.Series":
+    """탈락사유가 규칙 C 요건②③ 미충족인 행. 신·구 표기 모두 인식한다."""
+    rsn = frame.get("탈락사유", pd.Series("", index=frame.index))
+    rsn = rsn.fillna("").astype(str).str.strip()
+    return rsn.isin(RULE_C_UNMET_LABELS)
+
+
+def check_label_generation(snaps: dict) -> pd.DataFrame:
+    """스냅샷별로 어느 표기 세대를 쓰는지 조사하고, **섞여 있으면 중단**한다.
+
+    왜 중단하는가
+      세대가 섞이면 각 회차가 서로 다른 코드로 생성된 것이고, 그 상태의
+      측정값은 어느 조문 상태를 재는 것인지 말할 수 없다. 지수 레벨은
+      `eligible` 만 쓰므로 무해할 수 있으나, 이 도구는 `탈락사유` 로 완화
+      대상을 고르므로 **직접 오염된다.** 부분 재생성으로 봉합하지 말고
+      13회차를 한 커밋으로 전량 재생성해야 한다.
+    """
+    rows = []
+    for d in sorted(snaps):
+        s = snaps[d]
+        rsn = s.get("탈락사유", pd.Series("", index=s.index))
+        rsn = rsn.fillna("").astype(str).str.strip()
+        gen = sorted({lab for lab in RULE_C_UNMET_LABELS if (rsn == lab).any()})
+        mem = pd.to_numeric(s["mem_ratio"], errors="coerce")
+        cand = s[(mem >= SAT_MEM_TH) & (~s["eligible"].astype(bool))]
+        crsn = cand.get("탈락사유", pd.Series("", index=cand.index))
+        crsn = crsn.fillna("").astype(str).str.strip()
+        rows.append({
+            "심사시점": str(pd.Timestamp(d).date()),
+            "표기 세대": "/".join(gen) if gen else "(없음)",
+            "요건①통과·부적격": len(cand),
+            "규칙C 사유": int(crsn.isin(RULE_C_UNMET_LABELS).sum()),
+            "기타 사유": int((~crsn.isin(RULE_C_UNMET_LABELS)).sum()),
+        })
+    rep = pd.DataFrame(rows)
+    gens = {g for g in rep["표기 세대"] if g != "(없음)"}
+    if len(gens) > 1:
+        print(rep.to_string(index=False))
+        sys.exit(
+            "[FAIL] 스냅샷의 탈락사유 표기가 세대별로 섞여 있다: "
+            f"{sorted(gens)}\n"
+            "       이 상태에서 낸 규칙 C 기여도는 어느 조문 상태의 값인지 "
+            "말할 수 없다.\n"
+            "       13회차를 한 코드 커밋으로 전량 재생성한 뒤 재실행할 것 "
+            "(부분 재생성 금지).")
+    return rep
 
 
 def rule_c_report(snaps: dict, ledger_path: str) -> pd.DataFrame:
@@ -78,8 +138,7 @@ def rule_c_report(snaps: dict, ledger_path: str) -> pd.DataFrame:
         s = snaps[d]
         mem = pd.to_numeric(s["mem_ratio"], errors="coerce")
         hi = s[mem >= SAT_MEM_TH]
-        rsn = hi.get("탈락사유", pd.Series("", index=hi.index)).fillna("").astype(str)
-        unmet = rsn.str.strip().eq(RULE_C_UNMET)
+        unmet = _unmet_mask(hi)
         rows.append({
             "심사시점": str(pd.Timestamp(d).date()),
             "요건(1) 통과": len(hi),
@@ -97,9 +156,8 @@ def relax_rule_c(snaps: dict) -> dict:
     for d, s in snaps.items():
         t = s.copy()
         mem = pd.to_numeric(t["mem_ratio"], errors="coerce")
-        rsn = t.get("탈락사유", pd.Series("", index=t.index)).fillna("").astype(str)
         flip = (mem >= SAT_MEM_TH) & (~t["eligible"].astype(bool)) \
-            & rsn.str.strip().eq(RULE_C_UNMET)
+            & _unmet_mask(t)
         t.loc[flip, "eligible"] = True
         t.loc[flip, "group"] = SAT
         out[d] = t
@@ -138,8 +196,17 @@ def main() -> int:
                          as_of_today().strftime("%Y%m%d"), cache=a.prices_cache)
     px = px.dropna(axis=1, how="all")
 
+    gen = check_label_generation(snaps)          # 섞여 있으면 여기서 중단
+    print("[탈락사유 표기 세대 점검]\n", gen.to_string(index=False))
+
     rep = rule_c_report(snaps, os.path.join(HERE, "data", "verdict_ledger.csv"))
-    print("[규칙 C 요건별 통과 현황]\n", rep.to_string(index=False))
+    print("\n[규칙 C 요건별 통과 현황]\n", rep.to_string(index=False))
+
+    n_flip = int(rep["요건(2)(3) 미충족"].sum())
+    if n_flip == 0:
+        sys.exit("[FAIL] 완화 대상이 전 회차에서 0건이다 - 탈락사유 표기가 "
+                 "RULE_C_UNMET_LABELS 와 맞지 않을 가능성이 크다. 0 을 "
+                 "결과로 보고하지 않는다(fail-closed).")
 
     ev0, h0 = build_event_schedule(px, snaps, cfg=cfg)
     bt0 = simulate_index(px, ev0, base=1000.0)

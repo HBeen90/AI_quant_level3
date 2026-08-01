@@ -76,8 +76,31 @@ RULE_C_UNMET_LABELS = (
     "공정/위원회 미확인",
     "규칙 C 요건②③ 미충족",
 )
-RULE_C_UNMET = RULE_C_UNMET_LABELS[0]        # 하위호환(구 표기 참조용)
+#: 하위호환 별칭. **컬렉션**이다 - 기존 테스트가 `x in RULE_C_UNMET` 으로
+#: 멤버십을 검사한다. 문자열 하나로 두면 부분일치가 되어 조용히 통과한다.
+RULE_C_UNMET = RULE_C_UNMET_LABELS
 SAT_MEM_TH = 0.70
+
+
+def _rule_c_candidates(frame) -> "pd.Series":
+    """규칙 C **심사 대상**인 행. `mem_ratio >= 0.70` 만으로 세면 안 된다.
+
+    `classify_row` 는 규칙 0(앵커) -> A(핵심 30%) -> C(위성) 를 **순차** 적용하며,
+    앞 규칙에서 확정된 종목은 규칙 C 를 보지 않는다. SK하이닉스(메모리향 0.95)는
+    앵커이므로 규칙 C 후보가 아니고, 이를 세면 규칙 C 의 구속력이 과대계상된다.
+
+    `build_pit_snapshots.to_snapshot()` 의 `group` 라벨이 그 순차 적용 결과와
+    정확히 일치한다.
+
+        group == "satellite"  <=>  앵커 아님 AND 노출도 < 30% AND 메모리향 >= 70%
+
+    그러므로 `group` 을 쓴다. 임계값을 여기서 다시 구현하면 스냅샷 생성기와
+    갈릴 수 있다(단일 출처 유지).
+    """
+    if "group" not in frame.columns:
+        sys.exit("[FAIL] 스냅샷에 group 열이 없다 - 규칙 C 후보를 특정할 수 없다. "
+                 "mem_ratio 만으로 세면 앵커·핵심이 섞여 구속력이 과대계상된다.")
+    return frame["group"].astype(str).str.strip().eq(SAT)
 
 
 def _unmet_mask(frame) -> "pd.Series":
@@ -103,14 +126,13 @@ def check_label_generation(snaps: dict) -> pd.DataFrame:
         rsn = s.get("탈락사유", pd.Series("", index=s.index))
         rsn = rsn.fillna("").astype(str).str.strip()
         gen = sorted({lab for lab in RULE_C_UNMET_LABELS if (rsn == lab).any()})
-        mem = pd.to_numeric(s["mem_ratio"], errors="coerce")
-        cand = s[(mem >= SAT_MEM_TH) & (~s["eligible"].astype(bool))]
+        cand = s[_rule_c_candidates(s) & (~s["eligible"].astype(bool))]
         crsn = cand.get("탈락사유", pd.Series("", index=cand.index))
         crsn = crsn.fillna("").astype(str).str.strip()
         rows.append({
             "심사시점": str(pd.Timestamp(d).date()),
             "표기 세대": "/".join(gen) if gen else "(없음)",
-            "요건①통과·부적격": len(cand),
+            "규칙C후보·부적격": len(cand),
             "규칙C 사유": int(crsn.isin(RULE_C_UNMET_LABELS).sum()),
             "기타 사유": int((~crsn.isin(RULE_C_UNMET_LABELS)).sum()),
         })
@@ -136,8 +158,7 @@ def rule_c_report(snaps: dict, ledger_path: str) -> pd.DataFrame:
     rows = []
     for d in sorted(snaps):
         s = snaps[d]
-        mem = pd.to_numeric(s["mem_ratio"], errors="coerce")
-        hi = s[mem >= SAT_MEM_TH]
+        hi = s[_rule_c_candidates(s)]          # 앵커·핵심 제외
         unmet = _unmet_mask(hi)
         rows.append({
             "심사시점": str(pd.Timestamp(d).date()),
@@ -155,8 +176,7 @@ def relax_rule_c(snaps: dict) -> dict:
     out = {}
     for d, s in snaps.items():
         t = s.copy()
-        mem = pd.to_numeric(t["mem_ratio"], errors="coerce")
-        flip = (mem >= SAT_MEM_TH) & (~t["eligible"].astype(bool)) \
+        flip = _rule_c_candidates(t) & (~t["eligible"].astype(bool)) \
             & _unmet_mask(t)
         t.loc[flip, "eligible"] = True
         t.loc[flip, "group"] = SAT
@@ -201,6 +221,9 @@ def main() -> int:
 
     rep = rule_c_report(snaps, os.path.join(HERE, "data", "verdict_ledger.csv"))
     print("\n[규칙 C 요건별 통과 현황]\n", rep.to_string(index=False))
+    print("      * '요건(1) 통과' = 규칙 C **심사 대상** 수(group=satellite). "
+          "규칙 0(앵커)·A(핵심)로 확정된 종목은 순차 적용상 규칙 C 를 보지 않으므로 "
+          "제외한다 - 포함하면 구속력이 과대계상된다.")
 
     n_flip = int(rep["요건(2)(3) 미충족"].sum())
     if n_flip == 0:

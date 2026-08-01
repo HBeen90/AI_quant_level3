@@ -35,12 +35,19 @@ OLD, NEW = "공정/위원회 미확인", "규칙 C 요건②③ 미충족"
 
 
 def _snap(label: str) -> pd.DataFrame:
-    """요건① 통과 3종목 중 1개 적격 · 1개 규칙C 미충족 · 1개 다른 사유."""
+    """규칙 C 후보 3종목 중 1개 적격 · 1개 규칙C 미충족 · 1개 다른 사유.
+
+    `group` 은 `build_pit_snapshots.to_snapshot()` 규약을 따른다 - 앵커도 핵심도
+    아니고 메모리향 >= 70% 면 `satellite`, 미달이면 `core` 다. 규칙 C 후보 판정이
+    이 라벨을 쓰므로(순차 적용 반영) 픽스처도 같은 규약으로 만든다.
+    """
     return pd.DataFrame([
         ("000001", "적격위성", "satellite", 0.10, 0.85, 6e12, True, ""),
-        ("000002", "미충족", "", np.nan, 0.80, 5e12, False, label),
-        ("000003", "자료부족", "", np.nan, 0.75, 4e12, False, "자료불충분(ADV60)"),
-        ("000004", "저메모리", "", np.nan, 0.40, 3e12, False, "메모리향 미달"),
+        ("000002", "미충족", "satellite", 0.10, 0.80, 5e12, False, label),
+        ("000003", "자료부족", "satellite", 0.10, 0.75, 4e12, False,
+         "자료불충분(ADV60)"),
+        ("000004", "저메모리", "core", 0.10, 0.40, 3e12, False, "메모리향 미달"),
+        ("000005", "앵커", "anchor", np.nan, 0.95, 300e12, True, ""),
     ], columns=["ticker", "name", "group", "exposure", "mem_ratio",
                 "float_mcap", "eligible", "탈락사유"])
 
@@ -63,6 +70,24 @@ def test_both_label_generations_are_recognized(label):
         # 다른 사유·저메모리는 건드리지 않는다
         assert not bool(f.loc["000003", "eligible"])
         assert not bool(f.loc["000004", "eligible"])
+
+
+def test_anchor_is_not_a_rule_c_candidate():
+    """앵커는 규칙 0 으로 확정되므로 규칙 C 를 보지 않는다.
+
+    메모리향 0.95 인 앵커를 후보로 세면 규칙 C 의 구속력이 과대계상된다
+    (실측에서 2020-06-15 이 9 로 나오던 원인 - 정답은 8).
+    """
+    rep = rc.check_label_generation(_snaps([OLD] * 2))
+    assert (rep["규칙C후보·부적격"] == 2).all()      # 앵커·핵심 불포함
+    led = pd.DataFrame({"ticker": ["000001"], "name": ["a"],
+                        "fiscal_year": [2024], "judgment_status": ["FINAL"]})
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    lp = _os.path.join(d, "l.csv")
+    led.to_csv(lp, index=False)
+    r = rc.rule_c_report(_snaps([OLD] * 2), lp)
+    assert (r["요건(1) 통과"] == 3).all(), "앵커·핵심이 후보에 섞였다"
 
 
 def test_unknown_label_is_not_flipped():
@@ -93,8 +118,8 @@ def test_single_generation_passes(label):
 
 def test_generation_report_counts_candidates():
     rep = rc.check_label_generation(_snaps([OLD] * 2))
-    # 요건①(mem_ratio>=0.70) 통과·부적격 = 미충족 1 + 자료부족 1
-    assert (rep["요건①통과·부적격"] == 2).all()
+    # 규칙 C 후보(group=satellite)·부적격 = 미충족 1 + 자료부족 1
+    assert (rep["규칙C후보·부적격"] == 2).all()
 
 
 # ------------------------------------------------ 3. 집계도 두 표기 인식

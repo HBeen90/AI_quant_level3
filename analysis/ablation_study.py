@@ -139,10 +139,10 @@ LAYERS = [
 
 #: 참고 ― 한 층만 제거(leave-one-out). 누적표가 못 보여주는 것을 채운다.
 LEAVE_ONE_OUT = [
-    ("현행 − 규칙 A", {ANCHOR, SAT}, "mid", True),
-    ("현행 − 규칙 C", {ANCHOR, CORE}, "mid", True),
-    ("현행 − 버퍼", {ANCHOR, CORE, SAT}, "none", True),
-    ("현행 − 캡", {ANCHOR, CORE, SAT}, "mid", False),
+    ("현행 - 규칙 A", {ANCHOR, SAT}, "mid", True),
+    ("현행 - 규칙 C", {ANCHOR, CORE}, "mid", True),
+    ("현행 - 버퍼", {ANCHOR, CORE, SAT}, "none", True),
+    ("현행 - 캡", {ANCHOR, CORE, SAT}, "mid", False),
 ]
 
 COLS = ["CAGR", "연변동성", "MDD", "Sharpe(rf=0)", "연율화회전율",

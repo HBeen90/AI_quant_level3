@@ -1,4 +1,4 @@
-"""strict PIT 게이트 — 스냅샷·판정원장의 시점 정합성 검사.
+"""strict PIT 게이트 ― 스냅샷·판정원장의 시점 정합성 검사.
 
 읽기 전용. 각 선정기준일에 사용된 값의 as-of 날짜가 그 선정기준일을
 넘지 않는지, 그리고 근거 키가 붙어 있는지를 검사한다.
@@ -92,7 +92,7 @@ def check_snapshots(pattern: str) -> tuple[list[str], list[str]]:
                 if asof_col not in header:
                     warns.append(
                         f"{loc} '{value_col}' 에 대응하는 '{asof_col}' 열이 없다 "
-                        "— as-of 없는 값은 PIT 검증 불가"
+                        "― as-of 없는 값은 PIT 검증 불가"
                     )
                     continue
                 asof_raw = (row.get(asof_col) or "").strip()
@@ -131,11 +131,11 @@ def check_ledger(path: Path) -> tuple[list[str], list[str]]:
     has_rcp = any(c.lower() in {"source_rcp_no", "rcept_no", "rcp_no"} for c in header)
     if not has_rcp:
         warns.append(
-            f"{path.name}: 접수번호 열이 없다 — 근거 키 없이는 값을 "
+            f"{path.name}: 접수번호 열이 없다 ― 근거 키 없이는 값을 "
             "원문으로 되짚을 수 없다 (strict PIT 미충족)"
         )
 
-    # 회계연도별 disclosed_at 분포 — 법정기한 가정 탐지
+    # 회계연도별 disclosed_at 분포 ― 법정기한 가정 탐지
     by_year: dict[str, set[str]] = defaultdict(set)
     for lineno, row in enumerate(rows, start=2):
         loc = f"{path.name}:{lineno}"
@@ -169,13 +169,13 @@ def check_ledger(path: Path) -> tuple[list[str], list[str]]:
             hint = " (사업보고서 법정기한)" if month_day == "03-31" else ""
             errors.append(
                 f"{path.name}: 회계연도 {year} 의 disclosed_at 이 전 종목 "
-                f"동일하다 ({only}){hint} — 실제 DART 접수일이 아니라 "
+                f"동일하다 ({only}){hint} ― 실제 DART 접수일이 아니라 "
                 "가정값으로 판단된다"
             )
         elif len(values) < 5:
             warns.append(
                 f"{path.name}: 회계연도 {year} 의 disclosed_at 이 "
-                f"{len(values)}종류뿐이다 {sorted(values)} — 실제 접수일 분포가 "
+                f"{len(values)}종류뿐이다 {sorted(values)} ― 실제 접수일 분포가 "
                 "맞는지 확인할 것"
             )
 
@@ -196,13 +196,13 @@ def check_control(path: Path) -> tuple[list[str], list[str]]:
 
     if len(rows) < 5:
         errors.append(
-            f"{path.name}: 통제 사례가 {len(rows)}건뿐이다 — 수집기 오작동과 "
+            f"{path.name}: 통제 사례가 {len(rows)}건뿐이다 ― 수집기 오작동과 "
             "'이력 없음'을 구분할 수 없다. 관리종목 지정이 확실한 종목 "
             "5건 이상을 양성 통제로 추가할 것"
         )
     if rows and not matched:
         errors.append(
-            f"{path.name}: 통제 사례 {len(rows)}건 중 매칭 0건 — 수집기가 "
+            f"{path.name}: 통제 사례 {len(rows)}건 중 매칭 0건 ― 수집기가 "
             "이벤트를 찾지 못하고 있다"
         )
     return errors, warns

@@ -278,6 +278,24 @@ def test_cli_output_is_cross_platform_reproducible():
     print("[OK] 원장 LF 고정 · 입력/출력 해시 · 실행환경 매니페스트 기록")
 
 
+def test_final_ledger_manifest_hashes_current_outputs():
+    """감사 매니페스트가 정정 전 원장 해시를 계속 가리키지 않는다."""
+    manifest = os.path.join(
+        ROOT, "evidence", "source_docs", "final_ledger_manifest.json")
+    meta = json.load(open(manifest, encoding="utf-8"))
+    paths = {
+        "judgment_input_final.csv": os.path.join(
+            ROOT, "evidence", "judgment_input_final.csv"),
+        "verdict_ledger.csv": os.path.join(ROOT, "data", "verdict_ledger.csv"),
+        "no_data_rows.csv": os.path.join(ROOT, "data", "no_data_rows.csv"),
+        "admin_history_normalized.csv": os.path.join(
+            ROOT, "data", "admin_history_normalized.csv"),
+    }
+    for name, path in paths.items():
+        assert meta["output_hashes"][name] == file_sha256(path), name
+    print("[OK] FINAL 원장 감사 매니페스트 output_hashes 4/4 일치")
+
+
 if __name__ == "__main__":
     test_blank_boolean_stays_unknown()
     test_provisional_draft_is_labeled_and_helpers_are_removed()
@@ -291,4 +309,5 @@ if __name__ == "__main__":
     test_admin_lookup_failure_stays_unknown_not_false()
     test_evidence_fetch_is_fiscal_year_bounded()
     test_cli_output_is_cross_platform_reproducible()
-    print("\n12/12 판정 원장 브릿지 테스트 통과")
+    test_final_ledger_manifest_hashes_current_outputs()
+    print("\n13/13 판정 원장 브릿지 테스트 통과")

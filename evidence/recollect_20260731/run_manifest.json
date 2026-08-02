@@ -1,0 +1,12 @@
+{
+  "collected_at": "2026-07-31",
+  "scope_rows": 215,
+  "collected_rows": 215,
+  "status_counts": {
+    "OK": 215
+  },
+  "raw_files": 215,
+  "selection_rule": "kind=A · final=False · '사업보고서' 포함 · 정정본 제외 후 최초 접수일·접수번호 오름차순 1건",
+  "independence": "scope.csv(코드·이름·사업연도)만 입력 · 원장 판정값·접수번호·접수일 미참조",
+  "note": "이 파일은 수집 계보만 기록한다. 원장과의 대조는 --crosscheck 가 수행한다."
+}

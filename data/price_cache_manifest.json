@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "path": "out/px.csv",
+  "source": "KIS Open API",
+  "price_type": "adjusted_close",
+  "collector": "analysis/fetch_prices_kis.py",
+  "source_artifact": "out/px_kis_ext.csv",
+  "source_artifact_sha256": "07f800b030e866d7866eb68e9a810e8ab83d8d2a68e9a85a45ebaf05399e28f7",
+  "line_ending": "LF",
+  "sha256": "fed83f01187acb5783c2a90222fc18f3b54a2581d3d3e733ffe908ddc1c04829",
+  "start": "2020-02-03",
+  "end": "2026-07-23",
+  "rows": 1589,
+  "tickers": 33,
+  "frozen_on": "2026-08-02",
+  "previous_cache_sha256": "2eb8abd30248e65ca384cc5b5c0b32f4da8fda8edbc9e979d372f6111ea5b35d"
+}

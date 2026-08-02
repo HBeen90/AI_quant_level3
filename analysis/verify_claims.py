@@ -561,7 +561,8 @@ def c_test_suite():
     p = subprocess.run([sys.executable, os.path.join(HERE, "tests", "run_all.py")],
                        capture_output=True, text=True, encoding="utf-8",
                        errors="replace", cwd=HERE,
-                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8",
+                            "HBM_VERIFY_CLAIMS_NESTED": "1"})
     files = re.search(r"(\d+)/(\d+) 파일 통과", p.stdout)
     # 파일 요약줄("N/N 파일 통과")은 제외하고 파일별 케이스 수만 합산
     cases = sum(int(m) for m in

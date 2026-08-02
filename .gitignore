@@ -6,6 +6,7 @@ __pycache__/
 docs_cache/
 data/raw/*.xlsx
 data/raw/*.csv
+!data/raw/krx_basic_info_20260802.csv
 
 
 # 사업보고서 원문 발췌 자동 생성물(hbm_evidence.py) — 커밋하지 않는다
@@ -32,3 +33,12 @@ notebooks/00_concept_check.ipynb
 # 한다. 빠지면 새로 클론한 사람에게서 "캐시 없음"으로 클레임이 실패하고,
 # '조사했다'는 발표 문장이 재현 불가가 된다.
 !evidence/survivorship/
+
+# DART independent recollection: track compact audit tables and manifest only.
+# The 215 raw filings stay outside Git; records.csv preserves their SHA-256.
+!evidence/recollect_20260731/
+evidence/recollect_20260731/*
+!evidence/recollect_20260731/crosscheck.csv
+!evidence/recollect_20260731/records.csv
+!evidence/recollect_20260731/run_manifest.json
+!evidence/recollect_20260731/scope.csv

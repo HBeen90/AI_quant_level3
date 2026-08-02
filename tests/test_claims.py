@@ -165,7 +165,12 @@ def test_factsheet_is_generated_not_handwritten():
             + [a[0] for a in AUDITS]
         missing = [title for title in expected_titles if title not in cur]
         assert not missing, f"FACTSHEET 저장본이 등록부보다 낡음: {missing}"
-        assert "[FAIL]" not in cur, "FACTSHEET에 실패한 발표 문장이 남아 있음"
+        # `c_test_suite` runs this file while regenerating the FACTSHEET.
+        # Ignore the persisted status only in that explicitly marked nested
+        # run, otherwise a stale suite-failure row can never heal itself.
+        if os.environ.get("HBM_VERIFY_CLAIMS_NESTED") != "1":
+            assert "[FAIL]" not in cur, \
+                "FACTSHEET에 실패한 발표 문장이 남아 있음"
     print("[OK] FACTSHEET 생성 경로 동작 · 저장본 등록부 정합")
 
 

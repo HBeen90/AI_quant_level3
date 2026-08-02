@@ -48,3 +48,6 @@ evidence/recollect_20260731/*
 data/market_facts/raw/
 data/raw/krx_basic_info_*.csv
 data/raw/HBM_value_33_*.csv
+
+# KRX 지수 시계열 캐시 - 원본 재배포 회피(데이터_이용조건_확인_20260803.md)
+out/benchmark_*.csv

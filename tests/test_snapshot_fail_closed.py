@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 import sys
 import types
 
@@ -46,11 +47,13 @@ def _cap_all(n_bad: int = 0) -> pd.DataFrame:
     return df
 
 
-def _install(cap_all, rng=None, ohlcv=None):
+def _install(cap_all, rng=None, ohlcv=None, cap_error=None):
     """가짜 pykrx 주입. rng/ohlcv 를 None 으로 두면 '빈 결과'를 흉내낸다."""
     def get_market_cap(*args, **kwargs):
         if len(args) >= 3:                      # 기간 + 종목 = 시계열 조회
             return rng if rng is not None else pd.DataFrame()
+        if cap_error is not None:
+            raise cap_error
         return cap_all
 
     def get_market_ohlcv(*args, **kwargs):
@@ -71,9 +74,9 @@ def _series_ok() -> pd.DataFrame:
     return pd.DataFrame({"시가총액": 1e12, "거래대금": 5e9}, index=idx)
 
 
-def _facts():
+def _facts(**kwargs):
     import build_pit_snapshots as b
-    return b.market_facts(TICKERS, ASOF)
+    return b.market_facts(TICKERS, ASOF, **kwargs)
 
 
 # ------------------------------------------------ 정상 경로
@@ -83,6 +86,55 @@ def test_healthy_fetch_returns_facts():
     assert len(f) == 3
     assert bool(f["listed"].all())
     assert float(f["market_cap"].min()) > 0
+
+
+def test_cached_adv_and_listing_dates_avoid_per_ticker_krx_calls():
+    _install(_cap_all(), rng=None, ohlcv=pd.DataFrame())
+    dates = pd.bdate_range(end=ASOF, periods=80)
+    adv = pd.DataFrame(5e9, index=dates, columns=TICKERS)
+    listing = pd.Series(pd.Timestamp("2010-01-04"), index=TICKERS)
+    facts = _facts(adv_panel=adv, listing_dates=listing)
+    assert len(facts) == 3
+    assert (facts["adv60"] == 5e9).all()
+    assert (facts["listed_days"] > 0).all()
+
+
+def test_cached_adv_counts_halt_day_as_zero():
+    _install(_cap_all(), rng=None, ohlcv=pd.DataFrame())
+    dates = pd.bdate_range(end=ASOF, periods=80)
+    adv = pd.DataFrame(5e9, index=dates, columns=TICKERS)
+    adv.loc[dates[-1], "000660"] = np.nan
+    listing = pd.Series(pd.Timestamp("2010-01-04"), index=TICKERS)
+    facts = _facts(adv_panel=adv, listing_dates=listing)
+    expected = 5e9 * 59 / 60
+    assert facts.loc["000660", "adv60"] == pytest.approx(expected)
+
+
+def test_cached_adv_allows_short_history_for_new_listing():
+    _install(_cap_all(), rng=None, ohlcv=pd.DataFrame())
+    dates = pd.bdate_range(end=ASOF, periods=20)
+    adv = pd.DataFrame(5e9, index=dates, columns=TICKERS)
+    listing = pd.Series(ASOF - pd.Timedelta(days=30), index=TICKERS)
+    facts = _facts(adv_panel=adv, listing_dates=listing)
+    assert (facts["adv60"] == 5e9).all()
+
+
+def test_cached_adv_requires_full_market_window_for_established_ticker():
+    _install(_cap_all(), rng=None, ohlcv=pd.DataFrame())
+    dates = pd.bdate_range(end=ASOF, periods=20)
+    adv = pd.DataFrame(5e9, index=dates, columns=TICKERS)
+    listing = pd.Series(pd.Timestamp("2010-01-04"), index=TICKERS)
+    with pytest.raises(SystemExit, match="fewer than 60 market days"):
+        _facts(adv_panel=adv, listing_dates=listing)
+
+
+def test_market_cap_login_failure_is_fail_closed_without_traceback():
+    _install(_cap_all(), cap_error=KeyError("KRX login response"))
+    with pytest.raises(SystemExit) as e:
+        _facts()
+    msg = str(e.value)
+    assert "시가총액 조회 실패" in msg
+    assert "KRX_ID/KRX_PW" in msg
 
 
 # ------------------------------------------------ 관문 1: 전체 시장 오염
@@ -147,3 +199,50 @@ def test_reproduces_the_20260731_incident_shape():
     _install(_cap_all(), rng=pd.DataFrame())
     with pytest.raises(SystemExit):
         _facts()
+
+
+def test_frozen_market_facts_verify_raw_source_hash(tmp_path):
+    import build_pit_snapshots as b
+
+    root = tmp_path / "facts"
+    raw = root / "raw"
+    raw.mkdir(parents=True)
+    source = raw / "krx_all_20250530.csv"
+    source.write_bytes(b"official KRX source")
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    frame = pd.DataFrame({
+        "ticker": TICKERS,
+        "listed": [True, True, True],
+        "close": [1.0, 1.0, 1.0],
+        "market_cap": [1e12, 1e12, 1e12],
+        "mcap_rank": [1.0, 2.0, 3.0],
+        "adv60": [1e9, 1e9, 1e9],
+        "listed_days": [1000.0, 1000.0, 1000.0],
+        "asof": [ASOF.date()] * 3,
+        "market_cap_source": ["KRX all-stock screen download"] * 3,
+        "source_file": [source.name] * 3,
+        "source_sha256": [source_hash] * 3,
+    })
+    frame.to_csv(root / "facts_20250530.csv", index=False)
+    mapping = pd.DataFrame({
+        "selection_date": [ASOF.date()],
+        "source_sha256": [source_hash],
+        "copied_file": [source.name],
+        "price_reference_file": ["px_kis_raw.csv"],
+        "price_reference_sha256": ["1" * 64],
+    })
+    mapping.to_csv(root / "source_mapping.csv", index=False)
+    facts = b.load_market_facts(str(root), ASOF, TICKERS)
+    assert facts.attrs["source_sha256"] == source_hash
+    assert len(facts.attrs["mapping_sha256"]) == 64
+    assert facts.attrs["price_reference_sha256"] == "1" * 64
+
+    source.write_bytes(b"tampered")
+    with pytest.raises(SystemExit, match="source hash mismatch"):
+        b.load_market_facts(str(root), ASOF, TICKERS)
+
+    source.write_bytes(b"official KRX source")
+    mapping.loc[0, "source_sha256"] = "0" * 64
+    mapping.to_csv(root / "source_mapping.csv", index=False)
+    with pytest.raises(SystemExit, match="source mapping does not match"):
+        b.load_market_facts(str(root), ASOF, TICKERS)

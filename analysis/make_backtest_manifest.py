@@ -134,8 +134,33 @@ def load_gates(path: str) -> dict:
     return {k: gates[k] for k in GATE_KEYS}
 
 
+def validate_price_cache_manifest(path: str, prices_cache: str,
+                                  index_asof: str) -> dict:
+    """FINAL 가격 캐시가 수정주가 계약과 매니페스트 해시에 맞는지 검증한다."""
+    if not os.path.exists(path):
+        raise ValueError(f"가격 캐시 매니페스트 없음: {path}")
+    meta = json.loads(open(path, encoding="utf-8-sig").read())
+    configured = str(meta.get("path", "")).strip()
+    configured_path = (configured if os.path.isabs(configured) else
+                       os.path.join(HERE, configured))
+    if os.path.normcase(os.path.abspath(configured_path)) != \
+            os.path.normcase(os.path.abspath(prices_cache)):
+        raise ValueError("가격 캐시 경로가 매니페스트와 다름")
+    if str(meta.get("end", "")).strip() != index_asof:
+        raise ValueError("가격 캐시 종료일이 INDEX_ASOF와 다름")
+    if str(meta.get("price_type", "")).strip() != "adjusted_close":
+        raise ValueError("FINAL 지수 수익률에는 adjusted_close 가격 캐시가 필요함")
+    if not os.path.exists(prices_cache):
+        raise ValueError(f"가격 캐시 없음: {prices_cache}")
+    if str(meta.get("sha256", "")).lower() != _sha(prices_cache).lower():
+        raise ValueError("가격 캐시 SHA-256 불일치")
+    return meta
+
+
 def build(out_dir: str, snapshots_dir: str, ledger: str, prices_cache: str,
-          index_asof: str, final: bool, gates_path: str | None) -> dict:
+          index_asof: str, final: bool, gates_path: str | None,
+          price_manifest_path: str | None = None,
+          benchmark_cache: str | None = None) -> dict:
     snaps = sorted(glob.glob(os.path.join(snapshots_dir, "snapshot_*.csv")))
     if not snaps:
         raise ValueError(f"스냅샷 없음: {snapshots_dir}")
@@ -158,6 +183,8 @@ def build(out_dir: str, snapshots_dir: str, ledger: str, prices_cache: str,
     current_head = _git_head()
     gates = None
     gate_file = None
+    price_manifest = price_manifest_path or os.path.join(
+        HERE, "data", "price_cache_manifest.json")
     if final:
         gate_file = gates_path or os.path.join(HERE, "data",
                                                "final_run_gates.json")
@@ -176,6 +203,7 @@ def build(out_dir: str, snapshots_dir: str, ledger: str, prices_cache: str,
                 f"스냅샷 code_commit({snapshot_commit}) 이후 스냅샷 생성 코드가"
                 f" 바뀌었다(현재 HEAD {current_head}) - 스냅샷을 재생성할 것."
                 f" 대상 경로: {', '.join(_SNAPSHOT_CODE_PATHS)}")
+        validate_price_cache_manifest(price_manifest, prices_cache, index_asof)
 
     def _ver(mod):
         try:
@@ -190,6 +218,14 @@ def build(out_dir: str, snapshots_dir: str, ledger: str, prices_cache: str,
     benchmark = os.path.join(HERE, "data", "benchmark.yaml")
     if os.path.exists(benchmark):
         inputs["data/benchmark.yaml"] = _sha(benchmark)
+    if os.path.exists(price_manifest):
+        inputs[os.path.relpath(price_manifest, HERE).replace("\\", "/")] = \
+            _sha(price_manifest)
+    if benchmark_cache:
+        if not os.path.exists(benchmark_cache):
+            raise ValueError(f"벤치마크 캐시 없음: {benchmark_cache}")
+        inputs[os.path.relpath(benchmark_cache, HERE).replace("\\", "/")] = \
+            _sha(benchmark_cache)
     if gate_file:
         inputs[os.path.relpath(gate_file, HERE).replace("\\", "/")] = \
             _sha(gate_file)
@@ -222,6 +258,10 @@ def main() -> int:
                     default=os.path.join(HERE, "data", "verdict_ledger.csv"))
     ap.add_argument("--prices-cache",
                     default=os.path.join(HERE, "out", "px.csv"))
+    ap.add_argument("--price-manifest",
+                    default=os.path.join(HERE, "data",
+                                         "price_cache_manifest.json"))
+    ap.add_argument("--benchmark-cache", default=None)
     ap.add_argument("--index-asof", required=True)
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--provisional", action="store_true")
@@ -249,12 +289,20 @@ def main() -> int:
             print(f"[FAIL] --index-asof({a.index_asof}) 가 게이트 "
                   f"d1_index_asof({asof}) 와 다릅니다")
             return 1
-        print(f"[OK] 게이트 5건 전부 기입 확인 · INDEX_ASOF {asof} 일치")
+        try:
+            meta = validate_price_cache_manifest(
+                a.price_manifest, a.prices_cache, a.index_asof)
+        except ValueError as e:
+            print(f"[FAIL] FINAL 가격 캐시 미충족: {e}")
+            return 1
+        print(f"[OK] 게이트 5건 · INDEX_ASOF {asof} · 가격 캐시 "
+              f"{meta['price_type']} 일치")
         return 0
 
     try:
         m = build(a.out_dir, a.snapshots, a.ledger, a.prices_cache,
-                  a.index_asof, a.final, a.gates)
+                  a.index_asof, a.final, a.gates, a.price_manifest,
+                  a.benchmark_cache)
     except ValueError as e:
         print(f"[FAIL] {e}")
         return 1

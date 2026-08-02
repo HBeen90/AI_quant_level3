@@ -54,7 +54,9 @@ build_pit_snapshots.py - 시점별(PIT) 심사 스냅샷 생성기
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
+import re
 import sys
 
 import numpy as np
@@ -77,6 +79,117 @@ ADV_DAYS = 60
 MIN_LISTED_DAYS = 90      # 상장 후 3개월
 MIN_FREE_FLOAT = 0.10     # 유동비율 10%
 TOP_MCAP_EXEMPT = 50      # 시총 50위 이내는 상장기간 예외
+
+
+def load_adv_panel(path: str) -> pd.DataFrame:
+    panel = pd.read_csv(path, index_col=0, parse_dates=True)
+    panel.columns = [str(column).zfill(6) for column in panel.columns]
+    panel = panel.apply(pd.to_numeric, errors="coerce").sort_index()
+    if panel.index.has_duplicates or panel.columns.duplicated().any():
+        sys.exit("[FAIL] ADV cache has duplicate dates or tickers")
+    return panel
+
+
+def load_listing_dates(path: str) -> pd.Series:
+    data = pd.read_csv(path, dtype={"ticker": str})
+    if not {"ticker", "listing_date"}.issubset(data.columns):
+        sys.exit("[FAIL] listing dates require ticker, listing_date columns")
+    data["ticker"] = data["ticker"].str.strip().str.zfill(6)
+    if data["ticker"].duplicated().any():
+        sys.exit("[FAIL] listing dates contain duplicate tickers")
+    dates = pd.to_datetime(data["listing_date"], errors="coerce")
+    if dates.isna().any():
+        sys.exit("[FAIL] listing dates contain invalid dates")
+    return pd.Series(dates.values, index=data["ticker"])
+
+
+def load_market_facts(path: str, asof: pd.Timestamp,
+                      tickers: list[str]) -> pd.DataFrame:
+    """Load one frozen official market-facts file and verify its raw source."""
+    tag = pd.Timestamp(asof).strftime("%Y%m%d")
+    facts_path = os.path.join(path, f"facts_{tag}.csv")
+    if not os.path.exists(facts_path):
+        sys.exit(f"[FAIL] market facts missing for {tag}: {facts_path}")
+    data = pd.read_csv(facts_path, dtype={"ticker": str})
+    required = {"ticker", "listed", "close", "market_cap", "mcap_rank",
+                "adv60", "listed_days", "asof", "market_cap_source",
+                "source_file", "source_sha256"}
+    missing = sorted(required - set(data.columns))
+    if missing:
+        sys.exit(f"[FAIL] market facts {tag} missing columns: {missing}")
+    data["ticker"] = data["ticker"].str.strip().str.zfill(6)
+    if data["ticker"].duplicated().any():
+        sys.exit(f"[FAIL] market facts {tag} contain duplicate tickers")
+    expected = {str(t).zfill(6) for t in tickers}
+    absent = sorted(expected - set(data["ticker"]))
+    if absent:
+        sys.exit(f"[FAIL] market facts {tag} missing tickers: {absent}")
+    dates = pd.to_datetime(data["asof"], errors="coerce")
+    if dates.isna().any() or not dates.eq(pd.Timestamp(asof)).all():
+        sys.exit(f"[FAIL] market facts {tag} have inconsistent asof values")
+
+    source_files = data["source_file"].astype(str).unique()
+    source_hashes = data["source_sha256"].astype(str).str.lower().unique()
+    sources = data["market_cap_source"].astype(str).str.strip().unique()
+    if len(source_files) != 1 or len(source_hashes) != 1 or len(sources) != 1:
+        sys.exit(f"[FAIL] market facts {tag} have mixed source lineage")
+    source_file, source_hash = source_files[0], source_hashes[0]
+    if os.path.basename(source_file) != source_file:
+        sys.exit(f"[FAIL] market facts {tag} source_file must be a basename")
+    if re.fullmatch(r"[0-9a-f]{64}", source_hash) is None:
+        sys.exit(f"[FAIL] market facts {tag} source SHA-256 is invalid")
+    raw_path = os.path.join(path, "raw", source_file)
+    if not os.path.exists(raw_path):
+        sys.exit(f"[FAIL] raw KRX source missing for {tag}: {raw_path}")
+    actual_hash = hashlib.sha256(open(raw_path, "rb").read()).hexdigest()
+    if actual_hash != source_hash:
+        sys.exit(f"[FAIL] raw KRX source hash mismatch for {tag}")
+
+    mapping_path = os.path.join(path, "source_mapping.csv")
+    if not os.path.exists(mapping_path):
+        sys.exit(f"[FAIL] KRX source mapping missing: {mapping_path}")
+    mapping = pd.read_csv(mapping_path, dtype=str)
+    mapping_required = {"selection_date", "source_sha256", "copied_file",
+                        "price_reference_file", "price_reference_sha256"}
+    mapping_missing = sorted(mapping_required - set(mapping.columns))
+    if mapping_missing:
+        sys.exit(f"[FAIL] KRX source mapping missing columns: {mapping_missing}")
+    mapping_dates = pd.to_datetime(mapping["selection_date"], errors="coerce")
+    matched = mapping.loc[mapping_dates.eq(pd.Timestamp(asof))]
+    if len(matched) != 1:
+        sys.exit(f"[FAIL] KRX source mapping has {len(matched)} rows for {tag}")
+    mapped = matched.iloc[0]
+    if (mapped["copied_file"] != source_file
+            or str(mapped["source_sha256"]).lower() != source_hash):
+        sys.exit(f"[FAIL] KRX source mapping does not match facts for {tag}")
+    price_files = mapping["price_reference_file"].astype(str).unique()
+    price_hashes = (mapping["price_reference_sha256"].astype(str)
+                    .str.lower().unique())
+    if (len(price_files) != 1 or len(price_hashes) != 1
+            or os.path.basename(price_files[0]) != price_files[0]
+            or re.fullmatch(r"[0-9a-f]{64}", price_hashes[0]) is None):
+        sys.exit("[FAIL] KRX source mapping has invalid price-reference lineage")
+
+    data["listed"] = _strict_bool(data["listed"], "listed")
+    numeric = ["close", "market_cap", "mcap_rank", "adv60", "listed_days"]
+    for column in numeric:
+        data[column] = pd.to_numeric(data[column], errors="coerce")
+    live = data["listed"]
+    if data.loc[live, numeric].isna().any().any():
+        sys.exit(f"[FAIL] listed rows in market facts {tag} contain missing values")
+    if ((data.loc[live, ["close", "market_cap", "mcap_rank"]] <= 0).any().any()
+            or (data.loc[live, ["adv60", "listed_days"]] < 0).any().any()):
+        sys.exit(f"[FAIL] listed rows in market facts {tag} contain invalid values")
+
+    facts_hash = hashlib.sha256(open(facts_path, "rb").read()).hexdigest()
+    mapping_hash = hashlib.sha256(open(mapping_path, "rb").read()).hexdigest()
+    out = data.set_index("ticker").loc[sorted(expected),
+                                           ["listed", *numeric]]
+    out.attrs.update({"source": sources[0], "facts_sha256": facts_hash,
+                      "source_sha256": source_hash,
+                      "mapping_sha256": mapping_hash,
+                      "price_reference_sha256": price_hashes[0]})
+    return out
 
 _TRUE = {"true", "1", "y", "yes", "참"}
 _FALSE = {"false", "0", "n", "no", "거짓"}
@@ -175,14 +288,20 @@ def load_ledger(path: str, allow_provisional: bool = False) -> pd.DataFrame:
 # ----------------------------------------------------------------------
 # 기계가 채우는 부분 (pykrx)
 # ----------------------------------------------------------------------
-def market_facts(tickers: list, asof: pd.Timestamp) -> pd.DataFrame:
+def market_facts(tickers: list, asof: pd.Timestamp,
+                 adv_panel: pd.DataFrame | None = None,
+                 listing_dates: pd.Series | None = None) -> pd.DataFrame:
     """선정일 시점의 시총·거래대금·상장경과일. PIT - 미래 데이터를 안 본다."""
     try:
         from pykrx import stock
     except ImportError:
         sys.exit("[FAIL] pykrx 미설치 - pip install pykrx")
     ymd = pd.Timestamp(asof).strftime("%Y%m%d")
-    cap = stock.get_market_cap(ymd, market="ALL")
+    try:
+        cap = stock.get_market_cap(ymd, market="ALL")
+    except Exception as exc:  # pykrx may expose an HTML/login failure as KeyError
+        sys.exit(f"[FAIL] {ymd} 시가총액 조회 실패: {type(exc).__name__}: {exc}. "
+                 "KRX_ID/KRX_PW와 KRX 접근 상태를 확인하십시오.")
     if cap is None or cap.empty:
         sys.exit(f"[FAIL] {ymd} 시가총액 미수신 (휴장일 또는 KRX 접근 실패)")
     # KRX 가 JSON 대신 HTML(로그인/차단 안내)을 돌려주면 pykrx 는 예외를
@@ -205,14 +324,42 @@ def market_facts(tickers: list, asof: pd.Timestamp) -> pd.DataFrame:
         if t not in cap.index:
             rows.append({"ticker": t, "listed": False})
             continue
+        first = None if listing_dates is not None else stock.get_market_ohlcv(
+            "19950101", ymd, t, freq="m")
+        if listing_dates is not None:
+            if t not in listing_dates.index or pd.isna(listing_dates.loc[t]):
+                sys.exit(f"[FAIL] listing dates missing ticker: {t}")
+            listing_date = pd.Timestamp(listing_dates.loc[t])
+            listed_days = (pd.Timestamp(asof) - listing_date).days
+            if listed_days < 0:
+                sys.exit(f"[FAIL] listing date is after review date: {t}")
+        elif first is None or len(first) == 0:
+            sys.exit(f"[FAIL] {t} 상장 이력 조회 실패 - 상장경과일을 확인할 수 "
+                     "없습니다. NaN 으로 두면 상장 3개월 요건이 조용히 통과됩니다.")
+        else:
+            listing_date = pd.Timestamp(first.index[0])
+            listed_days = (pd.Timestamp(asof) - listing_date).days
+
         # ADV60 원천: 시가총액 일별 시계열의 '거래대금' 컬럼.
         # pykrx 1.2.x(2026 KRX 로그인 전환 재작성)부터 get_market_ohlcv
         # 단일종목 기간 조회에 '거래대금'이 없어졌다. get_market_cap 기간
         # 조회는 구·신 버전 모두 (시가총액·거래량·거래대금·상장주식수)를
         # 반환하므로 이를 단일 원천으로 쓴다. 값의 정의(일별 거래대금)는
         # 기존과 동일하며 원천 통계(KRX)도 같다.
-        rng = stock.get_market_cap(adv_start, ymd, t)
-        if rng is None or rng.empty:
+        rng = None if adv_panel is not None else stock.get_market_cap(adv_start, ymd, t)
+        if adv_panel is not None:
+            if t not in adv_panel.columns:
+                sys.exit(f"[FAIL] ADV cache missing ticker: {t}")
+            window = adv_panel.loc[:pd.Timestamp(asof), t].tail(ADV_DAYS)
+            if listed_days >= MIN_LISTED_DAYS and len(window) < ADV_DAYS:
+                sys.exit(f"[FAIL] {t} ADV cache has fewer than {ADV_DAYS} market days")
+            values = window.loc[window.index >= listing_date].fillna(0.0)
+            if values.empty:
+                sys.exit(f"[FAIL] {t} ADV cache has no observations after listing")
+            if (values < 0).any():
+                sys.exit(f"[FAIL] {t} ADV cache contains negative trading value")
+            adv = float(values.mean())
+        elif rng is None or rng.empty:
             # 이 지점에 도달했다는 것은 t 가 위 전체 시장 조회에 **존재**한다는
             # 뜻이다(없으면 앞에서 listed=False 로 빠졌다). 즉 상장 종목인데
             # 시계열만 비었다 - 미상장이 아니라 조회 실패다. 이를 미상장으로
@@ -220,15 +367,12 @@ def market_facts(tickers: list, asof: pd.Timestamp) -> pd.DataFrame:
             sys.exit(f"[FAIL] {t} 시가총액 시계열 조회 실패 - 해당 종목은 {ymd} "
                      "전체 시장 조회에 존재하므로 미상장이 아닙니다. KRX 접근 "
                      "상태를 확인하고 재실행하십시오(부분 산출물은 폐기).")
-        if "거래대금" not in rng.columns:
+        elif "거래대금" not in rng.columns:
             sys.exit(f"[FAIL] {t} 시가총액 시계열에 거래대금 컬럼 없음 - "
                      "pykrx 버전 확인 (pip install -U pykrx)")
-        adv = float(rng["거래대금"].tail(ADV_DAYS).mean())
-        first = stock.get_market_ohlcv("19950101", ymd, t, freq="m")
-        if first is None or len(first) == 0:
-            sys.exit(f"[FAIL] {t} 상장 이력 조회 실패 - 상장경과일을 확인할 수 "
-                     "없습니다. NaN 으로 두면 상장 3개월 요건이 조용히 통과됩니다.")
-        listed_days = (pd.Timestamp(asof) - pd.Timestamp(first.index[0])).days
+        else:
+            adv = float(rng["거래대금"].tail(ADV_DAYS).mean())
+
         rows.append({"ticker": t, "listed": True,
                      "close": float(cap.loc[t, "종가"]),
                      "market_cap": float(cap.loc[t, "시가총액"]),
@@ -319,6 +463,16 @@ def main() -> int:
     ap.add_argument("--allow-provisional", action="store_true",
                     help="DRAFT/TODO 원장을 탐색용으로만 허용")
     ap.add_argument("--code-commit", default="unknown")
+    ap.add_argument("--adv-cache",
+                    help="wide daily trading-value CSV; avoids per-ticker KRX ADV calls")
+    ap.add_argument("--listing-dates",
+                    help="CSV with ticker,listing_date; avoids KRX listing-history calls")
+    ap.add_argument("--market-facts-dir",
+                    help="frozen facts_YYYYMMDD.csv plus raw/ KRX sources")
+    ap.add_argument("--facts-dir", default=None,
+                    help="deprecated alias for --market-facts-dir")
+    ap.add_argument("--facts-source", default=None,
+                    help="deprecated; source lineage is read from frozen facts")
     a = ap.parse_args()
 
     td = pd.bdate_range(f"{a.start}-01-01", f"{a.end}-12-31")   # 근사 캘린더
@@ -338,6 +492,16 @@ def main() -> int:
         return 0
 
     led = load_ledger(a.ledger, a.allow_provisional)
+    if (a.market_facts_dir and a.facts_dir
+            and os.path.abspath(a.market_facts_dir) != os.path.abspath(a.facts_dir)):
+        sys.exit("[FAIL] --market-facts-dir and --facts-dir point to different paths")
+    facts_dir = a.market_facts_dir or a.facts_dir
+    if a.facts_source and not facts_dir:
+        sys.exit("[FAIL] --facts-source requires a frozen facts directory")
+    if facts_dir and (a.adv_cache or a.listing_dates):
+        sys.exit("[FAIL] --market-facts-dir cannot be mixed with KRX cache options")
+    adv_panel = load_adv_panel(a.adv_cache) if a.adv_cache else None
+    listing_dates = load_listing_dates(a.listing_dates) if a.listing_dates else None
     os.makedirs(a.out, exist_ok=True)
     made = 0
     for sel_d, reb_d in pairs:
@@ -345,11 +509,24 @@ def main() -> int:
         if pit.empty:
             print(f"[건너뜀] {sel_d.date()}: 공개된 판정 0건 (원장 disclosed_at 확인)")
             continue
-        facts = market_facts(pit["ticker"].tolist(), sel_d)
+        facts = (load_market_facts(facts_dir, sel_d,
+                                   pit["ticker"].tolist())
+                 if facts_dir else
+                 market_facts(pit["ticker"].tolist(), sel_d,
+                              adv_panel=adv_panel,
+                              listing_dates=listing_dates))
         snap = to_snapshot(screen(facts, pit))
         snap["selection_date"] = sel_d.date()
         snap["ff_market_cap_asof"] = sel_d.date()
-        snap["ff_market_cap_source"] = "pykrx 시총 x 원장 free_float"
+        snap["ff_market_cap_source"] = (
+            f"{facts.attrs['source']} x ledger free_float"
+            if facts_dir else "pykrx 시총 x 원장 free_float")
+        snap["market_facts_sha256"] = facts.attrs.get("facts_sha256", "")
+        snap["market_facts_source_sha256"] = facts.attrs.get("source_sha256", "")
+        snap["market_facts_mapping_sha256"] = facts.attrs.get(
+            "mapping_sha256", "")
+        snap["market_facts_price_reference_sha256"] = facts.attrs.get(
+            "price_reference_sha256", "")
         snap["free_float_asof"] = pit.set_index("ticker")["disclosed_at"] \
             .reindex(snap["ticker"]).dt.date.values
         snap["code_commit"] = a.code_commit

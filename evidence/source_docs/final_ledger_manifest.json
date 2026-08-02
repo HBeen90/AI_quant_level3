@@ -186,10 +186,10 @@
     }
   },
   "output_hashes": {
-    "judgment_input_final.csv": "3A217442D43F80EFC9DE5E38CB8A04D37AC94F15EA7E3E80C51B61164AF9F4E6",
-    "verdict_ledger.csv": "E89BDCE90E5B27DD9B57FA0FA87C37D9FE5103923438429FDE2C0C945682247F",
-    "no_data_rows.csv": "6721D3964AB40FB84E1AF0F77BA37A0FDA1622BEAE8C2CFA19403B387BF32D42",
-    "admin_history_normalized.csv": "D52FF7012FA989F28A22307C857BCDC1416A0392841E4B7F565862506FE2F669"
+    "judgment_input_final.csv": "62844723F2481CF72EDA3355D95442BFE59CC7AAD00129542D493134E3711BAC",
+    "verdict_ledger.csv": "EAB08F09026AEC0D0C9B44C1F29EA7FF835A21D60CA4831824ED3961425936EC",
+    "no_data_rows.csv": "631EC0D189FE6E9700DE052214FD8F9A60FA428DD8E6178A25CAE69ECEEF14FD",
+    "admin_history_normalized.csv": "E84A0D1AA54AF9F51B245AD42D19B05422BE85E56B1E56C63A784F2211F298E0"
   },
   "output_format": {
     "verdict_ledger.csv": {
@@ -236,12 +236,12 @@
       {
         "ticker": "322310",
         "fiscal_year": 2024,
-        "note": "원문 HBM 언급 0회 - B안 정정 반영분(신규 발견 아님)"
+        "note": "원문 HBM 언급 0회 - B안 정정 반영분(신규 발견 아님) · 2026-07-30 파트2 추인(evidence/judgment_ratification_20260730/)"
       },
       {
         "ticker": "322310",
         "fiscal_year": 2025,
-        "note": "원문 HBM 언급 0회 - B안 정정 반영분(신규 발견 아님)"
+        "note": "원문 HBM 언급 0회 - B안 정정 반영분(신규 발견 아님) · 2026-07-30 파트2 추인(evidence/judgment_ratification_20260730/)"
       }
     ],
     "scope_note": "접수번호·접수일·보고서명·원문 해시의 재현을 확인했다. 매출 노출도 등 내용 판정값의 재판정은 포함하지 않으며 파트2 책임으로 남는다.",

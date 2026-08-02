@@ -748,6 +748,14 @@ def main() -> int:
     a = ap.parse_args()
 
     os.makedirs(a.out, exist_ok=True)
+    # 같은 폴더를 다른 모드로 재실행할 때 이전 실행의 선택 산출물이 남으면
+    # 새 매니페스트가 서로 다른 실행을 한 묶음으로 동결한다.
+    for name in ("coverage_report.csv", "benchmark_level.csv",
+                 "benchmark_inference.csv", "index_level_pr_tr.csv",
+                 "policy_comparison.csv", "buffer_binding.csv"):
+        path = os.path.join(a.out, name)
+        if os.path.exists(path):
+            os.remove(path)
     snaps = load_snapshots(a.snapshots, a.require_lineage)
     emergency = load_snapshots(a.emergency_snapshots, a.require_lineage) \
         if a.emergency_snapshots else {}
@@ -822,6 +830,10 @@ def main() -> int:
     main_name = "mid" if "mid" in results else names[0]
     r = results[main_name]
     r["bt"].to_csv(os.path.join(a.out, "index_level.csv"), encoding="utf-8-sig")
+    benchmark = benchmarks.get(base_mode)
+    if benchmark is not None:
+        benchmark.rename("level").to_frame().to_csv(
+            os.path.join(a.out, "benchmark_level.csv"), encoding="utf-8-sig")
     r["hist"].to_csv(os.path.join(a.out, "change_history.csv"),
                      index=False, encoding="utf-8-sig")
     r["bt"].attrs["event_log"].to_csv(os.path.join(a.out, "event_log.csv"),
@@ -896,7 +908,7 @@ def main() -> int:
 
     print(f"\n저장: {a.out}/  (index_level.csv · change_history.csv · "
           "event_log.csv · theme_relevance.csv · coverage_report.csv · "
-          "policy_comparison.csv · buffer_binding.csv)")
+          "policy_comparison.csv · buffer_binding.csv · benchmark_level.csv)")
     if a.mode == "pr":
         print("주의: 가격은 PR 계약(배당 미반영 수정주가)이다. TR 병기는 "
               "--mode both --dividends <배당CSV> (제6조).")

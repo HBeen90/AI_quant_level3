@@ -94,7 +94,9 @@ def test_reader_searches_multiple_output_dirs():
     assert "backtest_tr" in s, "TR 폴더가 탐색 목록에 없다"
     # _read 가 단일 경로를 직접 조립하지 않아야 한다
     body = s[s.index("def _read("):s.index("def _read(") + 900]
-    assert "for d in _candidate_dirs()" in body
+    assert "_find(name)" in body
+    finder = s[s.index("def _find("):s.index("def _backtest_final(")]
+    assert "for d in _candidate_dirs()" in finder
 
 
 def test_candidate_dirs_are_deduplicated():

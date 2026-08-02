@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """run_backtest 드라이버 스모크 - pykrx 없이 전 배선을 검증한다.
 
-가격 캐시(--prices-cache)와 --no-benchmark 경로를 쓰면 네트워크 없이도
+가격·벤치마크 캐시를 쓰면 네트워크 없이도
 스냅샷 로드 -> 캘린더 대조 -> 커버리지 진단 -> 이벤트 스케줄 -> 지수 재생 ->
 지표·정책비교까지 전부 실행된다. CI에 그대로 넣을 수 있다.
 """
@@ -93,23 +93,52 @@ def test_driver_end_to_end():
     """드라이버를 실제 프로세스로 실행 - 정책 4안 비교까지 산출되는가."""
     with tempfile.TemporaryDirectory() as root:
         snap_dir, cache, rebs = _make_fixture(root)
+        px = pd.read_csv(cache, index_col=0, parse_dates=True)
+        benchmark_cache = os.path.join(root, "benchmark.csv")
+        px.mean(axis=1).rename("KRX 반도체").to_frame().to_csv(benchmark_cache)
+        benchmark_config = os.path.join(root, "benchmark.yaml")
+        with open(benchmark_config, "w", encoding="utf-8", newline="\n") as f:
+            f.write(
+                "status: CONFIRMED\n"
+                "headline_return_type: PR\n"
+                "effective_date: '2026-07-30'\n"
+                "resolved_by: 'test'\n"
+                "primary:\n"
+                "  pr_name: 'KRX 반도체'\n"
+                "  pr_code: '5044'\n"
+            )
         out = os.path.join(root, "out")
+        os.makedirs(out, exist_ok=True)
+        for stale in ("coverage_report.csv", "index_level_pr_tr.csv"):
+            pd.DataFrame({"stale": [1]}).to_csv(os.path.join(out, stale))
         cmd = [sys.executable, os.path.join(HERE, "analysis", "run_backtest.py"),
                "--snapshots", snap_dir, "--prices-cache", cache,
-               "--no-benchmark", "--policy", "all", "--require-lineage",
+               "--benchmark-cache", benchmark_cache,
+               "--benchmark-config", benchmark_config,
+               "--policy", "all", "--require-lineage",
                "--out", out]
         p = subprocess.run(cmd, capture_output=True, text=True,
                            encoding="utf-8", errors="replace",
                            env={**os.environ, "PYTHONIOENCODING": "utf-8",
                                 "INDEX_ASOF": "2026-07-26"})
         assert p.returncode == 0, f"드라이버 실패\nSTDOUT:{p.stdout}\nSTDERR:{p.stderr}"
-        for f in ("index_level.csv", "change_history.csv", "event_log.csv",
-                  "theme_relevance.csv", "policy_comparison.csv"):
+        for f in ("index_level.csv", "benchmark_level.csv",
+                  "benchmark_inference.csv", "change_history.csv",
+                  "event_log.csv", "theme_relevance.csv",
+                  "policy_comparison.csv"):
             assert os.path.exists(os.path.join(out, f)), f"산출물 누락: {f}"
+        assert not os.path.exists(os.path.join(out, "coverage_report.csv")), \
+            "결측 없는 재실행에 이전 coverage_report가 남음"
+        assert not os.path.exists(os.path.join(out, "index_level_pr_tr.csv")), \
+            "PR 재실행에 이전 PR/TR 산출물이 남음"
         lv = pd.read_csv(os.path.join(out, "index_level.csv"),
                          index_col=0, parse_dates=True)
         assert lv["level"].notna().all() and (lv["level"] > 0).all()
         assert abs(lv["level"].iloc[0] - 1000.0) < 1e-9, "기준지수 1000 아님"
+        bm = pd.read_csv(os.path.join(out, "benchmark_level.csv"),
+                         index_col=0, parse_dates=True)
+        assert list(bm.columns) == ["level"] and bm["level"].notna().all(), \
+            "차트용 벤치마크 시계열 계약 오류"
         assert lv.index.max() <= pd.Timestamp("2026-07-26"), \
             "가격 캐시가 INDEX_ASOF 이후까지 재생됨"
         tbl = pd.read_csv(os.path.join(out, "policy_comparison.csv"), index_col=0)

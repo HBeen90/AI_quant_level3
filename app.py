@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 
 import altair as alt
 import numpy as np
@@ -93,6 +94,37 @@ def _candidate_dirs() -> list:
     return out
 
 
+def _find(name: str) -> str | None:
+    for d in _candidate_dirs():
+        path = os.path.join(d, name)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _backtest_final() -> bool:
+    """현재 표시할 산출물이 유효한 FINAL 실행인지 확인한다."""
+    index_path = _find("index_level.csv")
+    if index_path is None:
+        return False
+    out_dir = os.path.dirname(os.path.abspath(index_path))
+    manifest_path = os.path.join(out_dir, "backtest_run_manifest_FINAL.json")
+    if not os.path.exists(manifest_path):
+        return False
+    try:
+        from analysis.verify_claims import _final_manifest_valid
+        with open(manifest_path, encoding="utf-8-sig") as f:
+            manifest = json.load(f)
+        return _final_manifest_valid(
+            manifest,
+            bt_dir=out_dir,
+            snapshot_dir=os.path.join(HERE, "data", "snapshots"),
+            root=HERE,
+        )
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def _read(name: str, ts: bool = False) -> pd.DataFrame | None:
     """산출 CSV 로더. ts=True 이면 인덱스를 날짜로 파싱한다.
 
@@ -103,12 +135,7 @@ def _read(name: str, ts: bool = False) -> pd.DataFrame | None:
     # `out/backtest_tr/` 로 분리해 저장하는데, 화면이 OUTDIR 한 곳만 보면
     # **파일이 있는데도 "없습니다"** 라고 표시한다(2026-08-01 실제 발생).
     # 존재하는 곳을 찾는다 - 경로를 화면에 박아 두면 또 낡는다.
-    p = None
-    for d in _candidate_dirs():
-        q = os.path.join(d, name)
-        if os.path.exists(q):
-            p = q
-            break
+    p = _find(name)
     if p is None:
         return None
     df = pd.read_csv(p, index_col=0)
@@ -119,6 +146,9 @@ def _read(name: str, ts: bool = False) -> pd.DataFrame | None:
 
 def _need(name: str, how: str) -> None:
     st.info(f"`{OUTDIR}/{name}` 이 없습니다.\n\n생성 명령:\n```\n{how}\n```")
+
+
+BACKTEST_FINAL = _backtest_final()
 
 
 # ==========================================================================
@@ -174,13 +204,19 @@ if PAGE.startswith("①"):
         st.warning(
             f"**PIT 심사 스냅샷이 {n_snap}회분뿐입니다.** 성과 보고·순방향 "
             "재생·실측 용량이 함께 막혀 있습니다.")
-    else:
+    elif BACKTEST_FINAL:
         st.success(
             "**PIT 심사 스냅샷 13회분이 채워졌습니다.** 성과·회전율·벤치마크 "
             "수치가 해제됐고, 계보 등급은 `METADATA_VERIFIED`입니다"
             "(DART 원문 215건 독립 재수집 전수 일치).\n\n"
             "남은 병목은 데이터가 아니라 **문서-구현 정합**입니다 - "
             "아래 미결 표 참조.")
+    else:
+        st.warning(
+            "**PIT 심사 스냅샷 13회분은 준비됐지만 성과 수치는 잠겨 있습니다.** "
+            "선택한 산출 폴더의 FINAL 매니페스트가 없거나 현재 파일·코드 해시와 "
+            "일치하지 않습니다. `run_backtest_final.ps1`을 통과한 뒤에만 "
+            "성과 화면을 공개합니다.")
 
     c1, c2, c3 = st.columns(3)
     c1.metric("회귀 테스트", "자동화됨", "tests/run_all.py")
@@ -220,7 +256,8 @@ if PAGE.startswith("①"):
     st.dataframe(pd.DataFrame([
         ("PIT 판정 원장", "215행 · 33종목 · FY2019~2025"),
         ("계보 검증", "L09_PARTIAL → METADATA_VERIFIED (불일치 0건)"),
-        ("성과 보고 수치", "FINAL 게이트 통과 · 인용 가능"),
+        ("성과 보고 수치", "FINAL 게이트 통과 · 인용 가능" if BACKTEST_FINAL
+         else "FINAL 매니페스트 미생성·무효 · 잠금"),
         ("생존편향 대조", "소멸 종목 382건 전수 · 후보 0건"),
         ("버킷 드리프트 점검", "실측 완료 · 안 C 는 캡과 양립 불가로 보류"),
         ("버퍼 27/67 근거", "정본 확정 (다중 seed) · 실측 무차이 병기"),
@@ -392,6 +429,12 @@ elif PAGE.startswith("④"):
               "python analysis/run_backtest.py --snapshots data/snapshots "
               "--prices-cache out/px.csv --policy all")
         st.stop()
+    if not BACKTEST_FINAL:
+        st.error(
+            "이 산출물은 유효한 FINAL 매니페스트로 검증되지 않았습니다. "
+            "잠정 CAGR·MDD·회전율의 발표 유출을 막기 위해 화면을 잠급니다. "
+            "`run_backtest_final.ps1` 완료 후 다시 여십시오.")
+        st.stop()
 
     lv = bt["level"]
     yrs = (lv.index[-1] - lv.index[0]).days / 365.25
@@ -403,16 +446,50 @@ elif PAGE.startswith("④"):
     c[3].metric("MDD", f"{dd.min():.2%}")
     c[4].metric("연율화 회전율", f"{bt['turnover'].sum() / yrs:.2%}")
 
-    d = lv.reset_index()
-    d.columns = ["date", "level"]
-    line = alt.Chart(d).mark_line(color=C_BLUE, strokeWidth=2).encode(
+    index_path = _find("index_level.csv")
+    benchmark_path = (os.path.join(os.path.dirname(index_path),
+                                   "benchmark_level.csv")
+                      if index_path else None)
+    benchmark = None
+    if benchmark_path and os.path.exists(benchmark_path):
+        benchmark = pd.read_csv(benchmark_path, index_col=0)
+        benchmark.index = pd.to_datetime(benchmark.index)
+    comparison = None
+    if benchmark is not None and len(benchmark):
+        b = benchmark["level"] if "level" in benchmark.columns else benchmark.iloc[:, 0]
+        comparison = pd.concat([
+            lv.rename("HBM 지수"), b.rename("KRX 반도체 PR (5044)")
+        ], axis=1).dropna()
+        if len(comparison) < 2:
+            comparison = None
+
+    if comparison is None:
+        plot = lv.rename("HBM 지수").to_frame()
+        y_title = "지수 (기준 1,000)"
+    else:
+        plot = comparison.div(comparison.iloc[0]).mul(1000)
+        y_title = "누적지수 (공통 시작=1,000)"
+
+    d = plot.reset_index().melt(plot.index.name or "index",
+                                var_name="계열", value_name="level")
+    d.columns = ["date", "계열", "level"]
+    line = alt.Chart(d).mark_line(strokeWidth=2).encode(
         x=alt.X("date:T", title=None),
-        y=alt.Y("level:Q", title="지수 (기준 1,000)",
+        y=alt.Y("level:Q", title=y_title,
                 scale=alt.Scale(zero=False)),
+        color=alt.Color("계열:N", scale=alt.Scale(
+            domain=["HBM 지수", "KRX 반도체 PR (5044)"],
+            range=[C_BLUE, C_AQUA]), legend=alt.Legend(title=None)),
         tooltip=[alt.Tooltip("date:T", title="일자"),
+                 alt.Tooltip("계열:N", title="계열"),
                  alt.Tooltip("level:Q", format=",.2f", title="지수")])
-    ev = bt[bt["turnover"] > 0].reset_index()
-    ev.columns = ["date"] + list(bt.columns)
+    event_dates = bt.index[bt["turnover"] > 0].intersection(plot.index)
+    ev = pd.DataFrame({
+        "date": event_dates,
+        "level": plot.loc[event_dates, "HBM 지수"].to_numpy(),
+        "reason": bt.loc[event_dates, "reason"].to_numpy(),
+        "turnover": bt.loc[event_dates, "turnover"].to_numpy(),
+    })
     marks = alt.Chart(ev).mark_point(
         size=64, filled=True, color=C_ORANGE, stroke="#fcfcfb",
         strokeWidth=2).encode(
@@ -421,8 +498,28 @@ elif PAGE.startswith("④"):
                  alt.Tooltip("turnover:Q", format=".4f", title="편도 회전율")])
     st.altair_chart(_base((line + marks).properties(height=340)),
                     use_container_width=True)
-    st.caption("주황 점 = 리밸런싱 이벤트(정기·수시·캡). 마우스를 올리면 사유와 "
-               "회전율이 나옵니다.")
+    if comparison is None:
+        st.caption("주황 점 = 리밸런싱 이벤트(정기·수시·캡). 벤치마크 시계열이 "
+                   "없어 HBM 지수만 표시합니다.")
+    else:
+        st.caption("파랑 = HBM 이론지수 · 초록 = KRX 반도체 PR(5044) · "
+                   "주황 점 = 리밸런싱 이벤트. 두 지수는 공통 시작일을 "
+                   "1,000으로 정규화했습니다. 이 비교는 지수의 상대성과(active)이며, "
+                   "상품 NAV의 패시브 추종오차와 구분합니다.")
+        def _stats(series):
+            years = (series.index[-1] - series.index[0]).days / 365.25
+            ret = series.pct_change(fill_method=None)
+            return {
+                "누적수익률": series.iloc[-1] / series.iloc[0] - 1,
+                "CAGR": (series.iloc[-1] / series.iloc[0]) ** (1 / years) - 1,
+                "연변동성": ret.std() * np.sqrt(252),
+                "MDD": (series / series.cummax() - 1).min(),
+            }
+        stats = pd.DataFrame({name: _stats(comparison[name])
+                              for name in comparison}).T
+        st.dataframe(stats, use_container_width=True,
+                     column_config={c: st.column_config.NumberColumn(
+                         c, format="%.2%%") for c in stats.columns})
 
     c1, c2 = st.columns(2)
     with c1:
@@ -475,6 +572,9 @@ elif PAGE.startswith("⑤"):
             "마십시오. 27/67은 현행 확정 운영값이며 회차별 재량 변경이 "
             "금지됩니다. 이 비교표는 최소 2회차 실측 축적 후 방법론 개정 "
             "절차(7.3)에서만 사후 검토 자료로 사용합니다.")
+        st.stop()
+    if not BACKTEST_FINAL:
+        st.error("버퍼 정책의 실측 비교 수치는 FINAL 게이트 통과 전 공개하지 않습니다.")
         st.stop()
 
     # 인덱스 이름을 가정하지 않는다(⑥ 화면과 같은 유형). 지금은 이름이
@@ -551,6 +651,9 @@ else:
             "`ex_date, ticker, dps` (DART 「현금·현물배당결정」 공시의 "
             "배당기준일 권장 - pykrx DPS는 연간 스냅샷이라 배당락일 역산이 "
             "위험합니다).")
+        st.stop()
+    if not BACKTEST_FINAL:
+        st.error("PR·TR 실측 수치는 FINAL 게이트 통과 전 공개하지 않습니다.")
         st.stop()
 
     # 인덱스 이름을 가정하지 않는다. 저장 시점에 따라 "index" 일 수도

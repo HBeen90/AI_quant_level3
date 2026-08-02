@@ -561,7 +561,8 @@ def c_test_suite():
     p = subprocess.run([sys.executable, os.path.join(HERE, "tests", "run_all.py")],
                        capture_output=True, text=True, encoding="utf-8",
                        errors="replace", cwd=HERE,
-                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8",
+                            "HBM_VERIFY_CLAIMS_NESTED": "1"})
     files = re.search(r"(\d+)/(\d+) 파일 통과", p.stdout)
     # 파일 요약줄("N/N 파일 통과")은 제외하고 파일별 케이스 수만 합산
     cases = sum(int(m) for m in
@@ -952,13 +953,17 @@ def _code_changed_between(a: str, b: str) -> bool:
     return bool(r.stdout.strip())
 
 
-def _final_manifest_valid(m) -> bool:
+def _final_manifest_valid(m, bt_dir=None, snapshot_dir=None, root=None) -> bool:
     """FINAL 매니페스트의 게이트·해시가 현재 파일과 전부 일치해야 해제된다.
 
     산출 CSV·스냅샷·원장 어느 하나라도 매니페스트와 다르면(누락 포함)
     FINAL 로 인정하지 않는다 - 사후 변조 시 수치가 자동으로 다시 잠긴다.
     """
     from analysis.make_backtest_manifest import GATE_KEYS
+
+    bt_dir = os.path.abspath(bt_dir or _BT_DIR)
+    snapshot_dir = os.path.abspath(snapshot_dir or _SNAPSHOT_DIR)
+    root = os.path.abspath(root or HERE)
 
     gates = m.get("gates") or {}
     if set(gates) != set(GATE_KEYS) or not all(
@@ -990,19 +995,19 @@ def _final_manifest_valid(m) -> bool:
         for name, want in outputs.items():
             if os.path.basename(name) != name:
                 return False
-            p = os.path.join(_BT_DIR, name)
+            p = os.path.join(bt_dir, name)
             if not os.path.exists(p) or _sha_file(p) != str(want).upper():
                 return False
         for name, want in snapshots.items():
             if os.path.basename(name) != name:
                 return False
-            p = os.path.join(_SNAPSHOT_DIR, name)
+            p = os.path.join(snapshot_dir, name)
             if not os.path.exists(p) or _sha_file(p) != str(want).upper():
                 return False
         for name, want in inputs.items():
             p = os.path.abspath(os.path.join(
-                HERE, name.replace("/", os.sep)))
-            if os.path.commonpath((HERE, p)) != HERE:
+                root, name.replace("/", os.sep)))
+            if os.path.commonpath((root, p)) != root:
                 return False
             if not os.path.exists(p) or _sha_file(p) != str(want).upper():
                 return False

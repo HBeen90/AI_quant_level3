@@ -14,6 +14,9 @@ import os
 import runpy
 import sys
 import types
+import hashlib
+import json
+import subprocess
 
 import numpy as np
 import pandas as pd
@@ -51,7 +54,7 @@ class _Recorder:
 
     def __init__(self, page: str, outdir: str):
         self.page, self.outdir = page, outdir
-        self.frames, self.metrics, self.charts = [], [], 0
+        self.frames, self.metrics, self.messages, self.charts = [], [], [], 0
         self.sidebar = self
         self.column_config = _Any()
 
@@ -69,6 +72,15 @@ class _Recorder:
 
     def altair_chart(self, *a, **k):
         self.charts += 1
+
+    def error(self, message=None, *a, **k):
+        self.messages.append(("error", str(message)))
+
+    def warning(self, message=None, *a, **k):
+        self.messages.append(("warning", str(message)))
+
+    def info(self, message=None, *a, **k):
+        self.messages.append(("info", str(message)))
 
     def columns(self, spec, *a, **k):
         n = spec if isinstance(spec, int) else len(spec)
@@ -194,7 +206,47 @@ def _make_out(root: str) -> str:
         errors="replace", cwd=HERE,
         env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     assert p.returncode == 0, f"산출물 생성 실패:\n{p.stdout}\n{p.stderr}"
+    bt = pd.read_csv(os.path.join(out, "index_level.csv"),
+                     index_col=0, parse_dates=True)
+    ret = bt["level"].pct_change(fill_method=None).fillna(0) * 0.7
+    (1000 * (1 + ret).cumprod()).rename("level").to_frame().to_csv(
+        os.path.join(out, "benchmark_level.csv"), encoding="utf-8-sig")
+    _write_final_manifest(out)
     return out
+
+
+def _write_final_manifest(out: str) -> None:
+    from analysis.make_backtest_manifest import GATE_KEYS
+
+    def sha(path):
+        return hashlib.sha256(open(path, "rb").read()).hexdigest().upper()
+
+    snapshot_dir = os.path.join(HERE, "data", "snapshots")
+    snapshot = sorted(name for name in os.listdir(snapshot_dir)
+                      if name.startswith("snapshot_") and name.endswith(".csv"))[0]
+    ledger = os.path.join(HERE, "data", "verdict_ledger.csv")
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=HERE, text=True).strip()
+    gates = {
+        key: {"value": "2026-07-23" if key == "d1_index_asof" else "승인",
+              "by": "test", "on": "2026-07-30"}
+        for key in GATE_KEYS
+    }
+    outputs = {name: sha(os.path.join(out, name))
+               for name in ("index_level.csv", "benchmark_level.csv")}
+    manifest = {
+        "run_type": "FINAL_BACKTEST",
+        "index_asof": "2026-07-23",
+        "code_commit_snapshots": commit,
+        "code_commit_now": commit,
+        "inputs": {"data/verdict_ledger.csv": sha(ledger)},
+        "snapshots": {snapshot: sha(os.path.join(snapshot_dir, snapshot))},
+        "outputs": outputs,
+        "gates": gates,
+    }
+    with open(os.path.join(out, "backtest_run_manifest_FINAL.json"), "w",
+              encoding="utf-8", newline="\n") as f:
+        json.dump(manifest, f, ensure_ascii=False)
 
 
 def test_pages_with_data():
@@ -210,12 +262,29 @@ def test_pages_with_data():
         rec4 = _run_page("④ 백테스트 결과", out)
         labels = dict(rec4.metrics)
         assert "MDD" in labels and "CAGR" in labels
+        assert any(isinstance(frame, pd.DataFrame) and
+                   {"누적수익률", "CAGR", "연변동성", "MDD"} <= set(frame.columns)
+                   for frame in rec4.frames), "KRX 반도체 대조표가 없음"
         rec6 = _run_page("⑥ PR vs TR", out)
         gap = dict(rec6.metrics)["연환산 배당 기여도"]
         assert gap.endswith("%") and float(gap[:-1]) > 0, \
             f"배당 기여도가 양수가 아님: {gap}"
         print(f"[OK] ④~⑥ 산출물 연동 (MDD {labels['MDD']}, "
               f"CAGR {labels['CAGR']}, 배당 기여도 {gap})")
+
+
+def test_performance_pages_lock_without_final_manifest():
+    """잠정 산출물이 있어도 성과·정책·PR/TR 수치를 화면에 노출하지 않는다."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as root:
+        out = _make_out(root)
+        os.remove(os.path.join(out, "backtest_run_manifest_FINAL.json"))
+        for page in ("④ 백테스트 결과", "⑤ 버퍼 정책 비교", "⑥ PR vs TR"):
+            rec = _run_page(page, out)
+            assert rec.charts == 0 and not rec.metrics, f"{page}: 잠정 수치가 노출됨"
+            assert any(level == "error" and "FINAL" in message
+                       for level, message in rec.messages), f"{page}: 잠금 안내 없음"
+    print("[OK] ④~⑥ 유효한 FINAL 매니페스트 없으면 성과 수치 잠금")
 
 
 def test_policy_page_warns_without_data():
@@ -231,4 +300,5 @@ if __name__ == "__main__":
     test_pit_page_shows_zero_churn_for_frozen()
     test_policy_page_warns_without_data()
     test_pages_with_data()
-    print("\n5/5 대시보드 헤드리스 스모크 통과")
+    test_performance_pages_lock_without_final_manifest()
+    print("\n6/6 대시보드 헤드리스 스모크 통과")

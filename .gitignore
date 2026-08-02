@@ -42,3 +42,9 @@ evidence/recollect_20260731/*
 !evidence/recollect_20260731/records.csv
 !evidence/recollect_20260731/run_manifest.json
 !evidence/recollect_20260731/scope.csv
+
+# 원천 데이터 - 제3자 배포로 해석될 수 있어 추적하지 않는다
+# 재현은 docs/데이터_재현절차.md 와 매니페스트 해시로 한다
+data/market_facts/raw/
+data/raw/krx_basic_info_*.csv
+data/raw/HBM_value_33_*.csv

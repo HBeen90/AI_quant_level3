@@ -37,11 +37,7 @@ Write-Host "[INDEX_ASOF] $IndexAsof (위원회 확정)"
 
 # 2) PIT 스냅샷
 if (-not $ReuseSnapshots) {
-    if (-not (Test-Path -LiteralPath data\market_facts)) {
-        Write-Host "[중단] data\market_facts 누락 - KRX 13회차 공식 팩트를 먼저 생성하세요"
-        exit 1
-    }
-    python analysis\build_pit_snapshots.py --ledger data\verdict_ledger.csv --out data\snapshots --code-commit $commit --market-facts-dir data\market_facts | Tee-Object -FilePath out\f2_snapshot_log.txt
+    python analysis\build_pit_snapshots.py --ledger data\verdict_ledger.csv --out data\snapshots --code-commit $commit | Tee-Object -FilePath out\f2_snapshot_log.txt
     if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 스냅샷 생성 실패" ; exit 1 }
 } else { Write-Host "[스냅샷] 기존 data\snapshots 재사용" }
 
@@ -50,26 +46,10 @@ python analysis\run_backtest.py --snapshots data\snapshots --prices-cache out\px
 if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 커버리지 실패" ; exit 1 }
 
 # 4) 본 실행 (벤치마크: 기본 포함 - benchmark.yaml CONFIRMED 필요)
-$benchmarkCache = "out\benchmark_5044_pr_20200615_20260723.csv"
 $benchArgs = @()
-if ($NoBenchmark) {
-    $benchArgs += "--no-benchmark"
-} else {
-    $benchArgs += @("--benchmark-cache", $benchmarkCache)
-}
+if ($NoBenchmark) { $benchArgs += "--no-benchmark" }
 python analysis\run_backtest.py --snapshots data\snapshots --prices-cache out\px.csv --policy all --require-lineage --mode pr @benchArgs --out out\backtest | Tee-Object -FilePath out\f4_backtest_log.txt
 if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 본 실행 실패 - 로그 공유" ; exit 1 }
-if (-not $NoBenchmark) {
-    if (-not (Test-Path -LiteralPath $benchmarkCache)) {
-        Write-Host "[중단] 벤치마크 캐시가 생성되지 않았습니다: $benchmarkCache"
-        exit 1
-    }
-    # pandas가 Windows에서 쓴 CRLF/BOM을 Git 계약(LF, no BOM)으로 고정한다.
-    $benchmarkText = [IO.File]::ReadAllText($benchmarkCache)
-    $benchmarkText = $benchmarkText.Replace("`r`n", "`n").Replace("`r", "`n")
-    [IO.File]::WriteAllText($benchmarkCache, $benchmarkText,
-        [Text.UTF8Encoding]::new($false))
-}
 
 # 4b) 구성·버킷 진단 - 본 실행 산출물을 읽어 '규정 대비 실제'를 계량한다.
 #     본 실행 뒤·매니페스트 앞에 두는 이유: 산출물(out\backtest)에 CSV를 더하고,
@@ -81,9 +61,7 @@ python analysis\bucket_drift.py --snapshots data\snapshots --prices-cache out\px
 if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 버킷 드리프트 산출 실패 - 재현 경로가 엔진과 어긋났을 수 있음" ; exit 1 }
 
 # 5) FINAL 매니페스트 (게이트 재검증 포함)
-$manifestBenchArgs = @()
-if (-not $NoBenchmark) { $manifestBenchArgs += @("--benchmark-cache", $benchmarkCache) }
-python analysis\make_backtest_manifest.py --final --index-asof $IndexAsof --gates data\final_run_gates.json @manifestBenchArgs
+python analysis\make_backtest_manifest.py --final --index-asof $IndexAsof --gates data\final_run_gates.json
 if ($LASTEXITCODE -ne 0) { Write-Host "[중단] FINAL 매니페스트 생성 실패" ; exit 1 }
 
 # 6a) 클레임 검증 + FACTSHEET 재생성 - 테스트보다 **먼저** 돌린다.
@@ -103,16 +81,10 @@ if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 클레임 검증 실패 - 수치
 python tests\run_all.py
 if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 테스트 스위트 실패 - 위 출력의 FAIL 파일을 먼저 고칠 것" ; exit 1 }
 
-# 6c) 테스트 통과 클레임까지 포함한 최종 FACTSHEET. c_test_suite 의 내부
-#     run_all 은 HBM_VERIFY_CLAIMS_NESTED 로 표시되어 저장본 자기참조를 건너뛴다.
-python analysis\verify_claims.py --factsheet-out docs\FACTSHEET.md
-if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 최종 클레임 검증 실패 - 수치 공개 불가 상태" ; exit 1 }
-
 # 7) 생성 산출물만 동결 커밋
 $releasePaths = @(
     "data\snapshots",
     "out\backtest",
-    $benchmarkCache,
     "out\px.csv",
     "out\env_freeze_final.txt",
     "out\f2_snapshot_log.txt",

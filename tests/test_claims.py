@@ -258,6 +258,26 @@ def test_final_unlock_requires_current_hashes_and_commit():
     print("[OK] FINAL 이후 산출물·입력·코드 변경 시 클레임 잠금 재적용")
 
 
+def test_factsheet_release_text_tracks_final_status():
+    """FACTSHEET 하단이 FINAL 표와 반대 상태를 말하지 않는다."""
+    old_status = claims_module._backtest_status
+    try:
+        claims_module._backtest_status = lambda: ("final", {})
+        final = claims_module._factsheet_release_status()
+        assert "전구간 FINAL" in final
+        assert "전구간 잠정" not in final
+        assert "자동으로 다시 잠깁니다" in final
+
+        claims_module._backtest_status = lambda: ("provisional", {})
+        provisional = claims_module._factsheet_release_status()
+        assert "전구간 잠정" in provisional
+        assert "닫히기 전" in provisional
+        assert "전구간 FINAL" not in provisional
+    finally:
+        claims_module._backtest_status = old_status
+    print("[OK] FACTSHEET FINAL/잠정 상태 문구 동기화")
+
+
 if __name__ == "__main__":
     test_all_claims_reproduce()
     test_audits_are_separated_from_claims()
@@ -269,4 +289,5 @@ if __name__ == "__main__":
     test_factsheet_is_generated_not_handwritten()
     test_python_sources_are_cp949_compatible()
     test_final_unlock_requires_current_hashes_and_commit()
-    print("\n10/10 클레임 등록부 회귀 테스트 통과")
+    test_factsheet_release_text_tracks_final_status()
+    print("\n11/11 클레임 등록부 회귀 테스트 통과")

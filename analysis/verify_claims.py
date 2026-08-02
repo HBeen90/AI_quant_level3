@@ -1329,7 +1329,10 @@ FACTSHEET_TAIL = """
   재선정하고 비중까지 공표 반올림 범위로 맞췄습니다.
 - **look-ahead를 구조적으로 차단했고, 그 규율이 결과를 바꾼다는 것까지 보였습니다.**
 
-성과 수치를 아직 공개하지 않아도 **방법론의 완성도**는 이것으로 증명됩니다.
+__BACKTEST_RELEASE_STATUS__
+"""
+
+FACTSHEET_RELEASE_PROVISIONAL = """성과 수치를 아직 공개하지 않아도 **방법론의 완성도**는 이것으로 증명됩니다.
 역사적 PIT 원장(FINAL 215행)으로 전구간 잠정 백테스트까지 실행·자기검증을
 마쳤고, 위원회 게이트(D1 기준일·D2 벤치마크·D3 수시변경·판정 추인 2건)가
 닫히기 전에는 수치를 공개하지 않는 규율이 그대로 작동하고 있습니다.
@@ -1348,6 +1351,28 @@ D3 수시변경·판정 추인 2건)의 value/by/on 을 기입하고 ② `run_ba
 그 외의 새 수치는 지금처럼 재현 함수를 먼저 추가하십시오. 그 순서를
 지키면 이 사고는 다시 나지 않습니다.
 """
+
+FACTSHEET_RELEASE_FINAL = """역사적 PIT 원장(FINAL 215행)과 확정 벤치마크로 **전구간 FINAL
+백테스트를 실행·자기검증했으며**, 위원회 게이트 5건이 모두 닫혔습니다.
+위 검증표에 등록된 실측 성과 수치는 각 근거 파일의 범위 안에서 인용할 수
+있습니다.
+
+---
+
+## FINAL 이후 새 수치를 추가하고 싶다면
+
+현재 성과 수치의 해제 근거는 `backtest_run_manifest_FINAL.json` 입니다.
+산출물·스냅샷·원장·벤치마크 캐시 중 하나라도 매니페스트 해시와 달라지면
+FINAL 은 무효가 되고 수치는 자동으로 다시 잠깁니다. 새 수치는 재현 함수를
+먼저 등록하고, 입력이나 코드가 바뀌었다면 `run_backtest_final.ps1` 로 FINAL
+실행과 매니페스트를 다시 생성하십시오.
+"""
+
+
+def _factsheet_release_status() -> str:
+    return (FACTSHEET_RELEASE_FINAL
+            if _backtest_status()[0] == "final"
+            else FACTSHEET_RELEASE_PROVISIONAL)
 
 
 def _run(entries):
@@ -1420,7 +1445,9 @@ def main() -> int:
                   f"{len(rows)} 재현 성공)\n\n"
                 + body
                 + "\n"
-                + FACTSHEET_TAIL
+                + FACTSHEET_TAIL.replace(
+                    "__BACKTEST_RELEASE_STATUS__",
+                    _factsheet_release_status())
             )
             if a.factsheet_out:
                 os.makedirs(os.path.dirname(a.factsheet_out) or ".", exist_ok=True)

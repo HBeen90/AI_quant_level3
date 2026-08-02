@@ -4,3 +4,4 @@
 *.md text eol=lf
 *.json text eol=lf
 *.xlsx binary
+data/benchmark_raw/*.csv -text

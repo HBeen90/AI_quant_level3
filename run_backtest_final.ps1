@@ -55,6 +55,10 @@ $benchArgs = @()
 if ($NoBenchmark) {
     $benchArgs += "--no-benchmark"
 } else {
+    if (-not (Test-Path -LiteralPath $benchmarkCache)) {
+        python analysis\build_benchmark_cache_from_krx_exports.py --manifest data\benchmark_raw\krx_5044_pr_manifest.json --out $benchmarkCache
+        if ($LASTEXITCODE -ne 0) { Write-Host "[중단] 보관된 KRX 원본에서 벤치마크 캐시 생성 실패" ; exit 1 }
+    }
     $benchArgs += @("--benchmark-cache", $benchmarkCache)
 }
 python analysis\run_backtest.py --snapshots data\snapshots --prices-cache out\px.csv --policy all --require-lineage --mode pr @benchArgs --out out\backtest | Tee-Object -FilePath out\f4_backtest_log.txt

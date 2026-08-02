@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "index_code": "5044",
+  "index_name": "KRX Semiconductor",
+  "return_type": "PR",
+  "source": "KRX Data Marketplace",
+  "source_url": "https://data.krx.co.kr/",
+  "retrieved_on": "2026-08-03",
+  "encoding": "cp949",
+  "identity_note": "The operator downloaded these four date slices for confirmed KRX index code 5044. KRX CSV exports omit the selected code and name; data/benchmark.yaml preserves the independent resolver record.",
+  "coverage_start": "2020-06-15",
+  "coverage_end": "2026-07-23",
+  "observations": 1498,
+  "files": [
+    {
+      "file": "krx_5044_pr_20200615_20220614.csv",
+      "original_file": "data_5826_20260803.csv",
+      "rows": 494,
+      "start": "2020-06-15",
+      "end": "2022-06-14",
+      "sha256": "7c3671eef5ad785b94b1f653c5ff7842a55e42f02378cc6f4d42df4be6825896"
+    },
+    {
+      "file": "krx_5044_pr_20220615_20240614.csv",
+      "original_file": "data_5902_20260803.csv",
+      "rows": 493,
+      "start": "2022-06-15",
+      "end": "2024-06-14",
+      "sha256": "9f82c200d3b8098f915dc1c38fbcc10fe2064cc938137ad8e472908cee52762f"
+    },
+    {
+      "file": "krx_5044_pr_20240614_20260612.csv",
+      "original_file": "data_5918_20260803.csv",
+      "rows": 484,
+      "start": "2024-06-14",
+      "end": "2026-06-12",
+      "sha256": "579a96030980d1b6c8d3cabf6fa0617e302db1275b99890d6154c46484cf4b0f"
+    },
+    {
+      "file": "krx_5044_pr_20260615_20260723.csv",
+      "original_file": "data_5931_20260803.csv",
+      "rows": 28,
+      "start": "2026-06-15",
+      "end": "2026-07-23",
+      "sha256": "617e8d9d85f9e8d980d64675f2a36bd630ec724d100d422301f793901881d04b"
+    }
+  ]
+}
